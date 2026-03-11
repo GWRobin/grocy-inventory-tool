@@ -1,0 +1,24 @@
+services:
+  grocy-inventory:
+    # Färdig image från GitHub Container Registry.
+    # Byt ut DITT-GITHUB-ANVÄNDARNAMN/DITT-REPO mot dina faktiska värden,
+    # t.ex. ghcr.io/robinb/grocy-inventory:latest
+    image: ghcr.io/DITT-GITHUB-ANVÄNDARNAMN/DITT-REPO:latest
+    container_name: grocy-inventory
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8090:80"
+    networks:
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.grocy-inventory.rule=Host(`inventory.DINDOMAN.SE`)"
+      - "traefik.http.routers.grocy-inventory.entrypoints=websecure"
+      - "traefik.http.routers.grocy-inventory.tls=true"
+      - "traefik.http.routers.grocy-inventory.middlewares=authelia@file"
+      - "traefik.http.services.grocy-inventory.loadbalancer.server.url=http://127.0.0.1:8090"
+
+networks:
+  traefik:
+    external: true
+    name: traefik
