@@ -1,13 +1,20 @@
 services:
   grocy-inventory:
-    # Färdig image från GitHub Container Registry.
-    # Byt ut DITT-GITHUB-ANVÄNDARNAMN/DITT-REPO mot dina faktiska värden,
-    # t.ex. ghcr.io/robinb/grocy-inventory:latest
     image: ghcr.io/DITT-GITHUB-ANVÄNDARNAMN/DITT-REPO:latest
     container_name: grocy-inventory
     restart: unless-stopped
     ports:
       - "127.0.0.1:8090:80"
+    environment:
+      # Alternativ 1: ange direkt här
+      GROCY_URL: "https://grocy.ditt-hem.se"
+      GROCY_KEY: "din-api-nyckel"
+      # Alternativ 2: läs från en .env-fil (rekommenderas)
+      # Skapa filen .env i samma mapp med:
+      #   GROCY_URL=https://grocy.ditt-hem.se
+      #   GROCY_KEY=din-api-nyckel
+      # Och kommentera bort raderna ovan, lägg till:
+      # env_file: .env
     networks:
       - traefik
     labels:

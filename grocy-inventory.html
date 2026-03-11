@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Grocy – Inventering</title>
+  <!-- Konfiguration injicerad av Docker via miljövariabler. -->
+  <!-- Filen saknas vid lokal utveckling utan Docker – det är OK. -->
+  <script src="/config.js" onerror="window.GROCY_CONFIG={}"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js" crossorigin="anonymous"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -461,8 +464,14 @@
 const LS_URL = 'grocy_url';
 const LS_KEY = 'grocy_key';
 
-let GROCY_URL = localStorage.getItem(LS_URL) || '';
-let GROCY_KEY = localStorage.getItem(LS_KEY) || '';
+// Miljövariabler injicerade via config.js har högst prioritet.
+// localStorage används som fallback (manuell inmatning i inställningar).
+let GROCY_URL = (window.GROCY_CONFIG?.url && window.GROCY_CONFIG.url !== '${GROCY_URL}')
+  ? window.GROCY_CONFIG.url
+  : (localStorage.getItem(LS_URL) || '');
+let GROCY_KEY = (window.GROCY_CONFIG?.key && window.GROCY_CONFIG.key !== '${GROCY_KEY}')
+  ? window.GROCY_CONFIG.key
+  : (localStorage.getItem(LS_KEY) || '');
 
 // ─────────────────────────────────────────────
 //  State
@@ -972,6 +981,12 @@ document.getElementById('refreshBtn').addEventListener('click', () => {
 // ─────────────────────────────────────────────
 //  Init
 // ─────────────────────────────────────────────
+// Om config kommer från miljövariabler, dölj inställningsknappen
+const configFromEnv = !!(window.GROCY_CONFIG?.url && window.GROCY_CONFIG.url !== '${GROCY_URL}');
+if (configFromEnv) {
+  document.getElementById('settingsBtn').style.display = 'none';
+}
+
 if (!GROCY_URL || !GROCY_KEY) {
   openSettings();
 } else {
