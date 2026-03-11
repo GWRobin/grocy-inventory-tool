@@ -3,22 +3,21 @@ name: Build & publish Docker image
 on:
   push:
     branches: ["main"]
-    # Triggar även vid ny release-tagg, t.ex. v1.0.0
     tags: ["v*.*.*"]
-  # Bygg manuellt från Actions-fliken om du vill
   workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
-  # Fylls i automatiskt från ditt GitHub-användarnamn och repo-namn
   IMAGE_NAME: ${{ github.repository }}
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write  # Tillåter push till ghcr.io
+      packages: write
+      actions: write   # krävs för GHA cache-backend
 
     steps:
       - name: Checkout
@@ -29,29 +28,28 @@ jobs:
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}  # Inbyggd, ingen extra hemlighet behövs
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata (tags & labels)
+      - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            # latest på varje push till main
             type=raw,value=latest,enable={{is_default_branch}}
-            # semantisk versionstagg, t.ex. v1.2.3 → 1.2.3 + 1.2 + 1
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            # kort commit-hash för spårbarhet, t.ex. sha-a1b2c3d
             type=sha,prefix=sha-
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Build and push
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # Cachar lager mellan byggen för snabbare CI
           cache-from: type=gha
           cache-to: type=gha,mode=max
