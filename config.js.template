@@ -1,6 +1,0 @@
-// Genereras automatiskt vid containerstart från miljövariabler.
-// Sätt GROCY_URL och GROCY_KEY i docker-compose.yml (eller .env-fil).
-window.GROCY_CONFIG = {
-  url: "${GROCY_URL}",
-  key: "${GROCY_KEY}"
-};
