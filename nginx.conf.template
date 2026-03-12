@@ -1,0 +1,33 @@
+server {
+    listen 80;
+    server_name _;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # Security headers
+    add_header X-Frame-Options "SAMEORIGIN";
+    add_header X-Content-Type-Options "nosniff";
+    add_header Referrer-Policy "strict-origin-when-cross-origin";
+
+    # Gzip
+    gzip on;
+    gzip_types text/html text/css application/javascript;
+
+    # config.js genereras dynamiskt från miljövariabler (GROCY_URL, GROCY_KEY).
+    # nginx-imagen kör envsubst på den här filen vid containerstart.
+    location = /config.js {
+        return 200 'window.GROCY_CONFIG = { url: "${GROCY_URL}", key: "${GROCY_KEY}" };';
+        add_header Content-Type "application/javascript; charset=utf-8";
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    location ~* \.(js|css|png|jpg|ico|svg)$ {
+        expires 1d;
+        add_header Cache-Control "public, immutable";
+    }
+}
