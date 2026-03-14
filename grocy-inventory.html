@@ -360,6 +360,23 @@
       cursor: pointer; padding: 4px 8px; border-radius: 6px; transition: all .12s;
     }
     .clear-done-btn:hover { background: var(--surface2); color: var(--danger); }
+    .add-low-stock-btn {
+      font-size: 12px; color: var(--primary); background: none;
+      border: 1px solid var(--primary); border-radius: 6px;
+      cursor: pointer; padding: 4px 10px; transition: all .12s;
+      display: flex; align-items: center; gap: 5px; white-space: nowrap;
+    }
+    .add-low-stock-btn:hover { background: #ebf0ff; }
+    .add-low-stock-btn:disabled { opacity: .45; cursor: not-allowed; }
+    .receive-stock-btn {
+      font-size: 12px; color: var(--success); background: none;
+      border: 1px solid var(--success); border-radius: 6px;
+      cursor: pointer; padding: 4px 10px; transition: all .12s;
+      display: flex; align-items: center; gap: 5px; white-space: nowrap;
+    }
+    .receive-stock-btn:hover { background: var(--success-light); }
+    .receive-stock-btn:disabled { opacity: .45; cursor: not-allowed; }
+    .list-header-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 
     /* List items */
     .shop-item {
@@ -412,7 +429,14 @@
       transition: background .1s;
     }
     .shop-item-amt-btn:hover { background: var(--border); }
-    .shop-item-unit { font-size: 12px; color: var(--text-muted); padding: 0 6px; flex-shrink: 0; }
+    .shop-item-unit {
+      font-size: 12px; color: var(--text-muted); flex-shrink: 0;
+      width: 44px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .shop-add-unit {
+      font-size: 13px; font-weight: 600; color: var(--text-muted);
+      min-width: 30px; flex-shrink: 0;
+    }
 
     .shop-item-delete {
       width: 30px; height: 30px; border: none; background: none;
@@ -421,6 +445,13 @@
       flex-shrink: 0; transition: all .12s; font-size: 13px;
     }
     .shop-item-delete:hover { background: #fff5f5; color: var(--danger); }
+    .create-product-btn {
+      width: 26px; height: 26px; border: none; background: none;
+      color: var(--primary); cursor: pointer; border-radius: 5px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; transition: all .12s; font-size: 15px; opacity: .6;
+    }
+    .create-product-btn:hover { opacity: 1; background: #ebf0ff; }
 
     /* ── Settings overlay ── */
     .overlay {
@@ -595,6 +626,7 @@
           <input type="number" id="shopAmount" value="1" min="0.5" step="0.5" />
           <button class="shop-qty-btn" id="shopAmtPlus">+</button>
         </div>
+        <span id="shopUnit" class="shop-add-unit"></span>
         <button class="shop-add-btn" id="shopAddBtn" disabled>
           <i class="fas fa-plus"></i> Lägg till
         </button>
@@ -608,9 +640,17 @@
           <div class="shopping-list-title" id="shoppingListTitle">Inköpslista</div>
           <div class="shopping-list-meta" id="shoppingListMeta">Laddar…</div>
         </div>
-        <button class="clear-done-btn" id="clearDoneBtn" title="Ta bort avbockade">
-          <i class="fas fa-broom"></i> Rensa avbockade
-        </button>
+        <div class="list-header-actions">
+          <button class="receive-stock-btn" id="receiveStockBtn" title="Lägg till alla varor på listan i lager">
+            <i class="fas fa-box-open"></i> Kvittera in alla
+          </button>
+          <button class="add-low-stock-btn" id="addLowStockBtn" title="Lägg till alla varor under minlager på listan">
+            <i class="fas fa-arrow-trend-down"></i> Lägg till bristvaror
+          </button>
+          <button class="clear-done-btn" id="clearDoneBtn" title="Ta bort avbockade">
+            <i class="fas fa-broom"></i> Rensa avbockade
+          </button>
+        </div>
       </div>
       <div id="shoppingListItems">
         <div class="shopping-state">
@@ -658,6 +698,27 @@
   </div>
 </div>
 
+<!-- ── Create product overlay ── -->
+<div class="overlay hidden" id="createProductOverlay">
+  <div class="settings-modal">
+    <h2>➕ Skapa produkt</h2>
+    <p>Produkten skapas i Grocy och shoppinglist-raden kopplas automatiskt till den.</p>
+    <div class="form-group">
+      <label>Produktnamn</label>
+      <input type="text" id="cpName" autocomplete="off" />
+    </div>
+    <div class="form-group">
+      <label>Enhet</label>
+      <select id="cpUnit" class="filter-select" style="width:100%;padding:10px 12px"></select>
+      <div class="hint">Välj bland enheterna som finns definierade i Grocy.</div>
+    </div>
+    <div class="settings-actions">
+      <button class="btn btn-ghost" id="cpCancelBtn">Avbryt</button>
+      <button class="btn btn-primary" id="cpSaveBtn"><i class="fas fa-plus"></i> Skapa &amp; koppla</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Toast ── -->
 <div id="toast"></div>
 
@@ -677,6 +738,7 @@ let GROCY_KEY = (window.GROCY_CONFIG?.key && window.GROCY_CONFIG.key !== '${GROC
 //  State – Inventering
 // ─────────────────────────────────────────────
 let allProducts  = [];
+let allUnits     = [];
 let filteredList = [];
 const pendingChanges = new Map();
 
@@ -829,6 +891,7 @@ async function loadData() {
       grocyGet('/objects/locations').catch(() => [])
     ]);
 
+    allUnits = units || [];
     const catMap   = Object.fromEntries((categories || []).map(c => [c.id, c.name]));
     const unitMap  = Object.fromEntries((units || []).map(u => [u.id, u.name]));
     const locMap   = Object.fromEntries((locations || []).map(l => [l.id, l.name]));
@@ -1205,6 +1268,7 @@ function renderShoppingList() {
           <button class="shop-item-amt-btn" data-id="${item.id}" data-delta="1">+</button>
         </div>
         <span class="shop-item-unit">${esc(unit)}</span>
+        ${!item.product_id ? `<button class="create-product-btn" data-id="${item.id}" data-name="${esc(item.note || name)}" title="Skapa produkt i Grocy"><i class="fas fa-circle-plus"></i></button>` : ''}
         <button class="shop-item-delete" data-id="${item.id}" title="Ta bort">
           <i class="fas fa-xmark"></i>
         </button>
@@ -1236,6 +1300,9 @@ function renderShoppingList() {
       const val = parseFloat(input.value);
       if (!isNaN(val) && val > 0) updateShopItemAmount(input.dataset.id, val);
     });
+  });
+  shopListItems.querySelectorAll('.create-product-btn').forEach(btn => {
+    btn.addEventListener('click', () => openCreateProduct(btn.dataset.id, btn.dataset.name));
   });
 }
 
@@ -1281,6 +1348,92 @@ document.getElementById('clearDoneBtn').addEventListener('click', async () => {
   shoppingItems = shoppingItems.filter(i => String(i.done) !== '1');
   renderShoppingList();
   toast(`${doneItems.length} avbockade raderade`, 'success');
+});
+
+document.getElementById('addLowStockBtn').addEventListener('click', async () => {
+  // Find products below min stock that aren't already on this list
+  const lowProducts = allProducts.filter(p => p.minStock > 0 && p.stock < p.minStock);
+  if (lowProducts.length === 0) { toast('Inga varor under minlager', 'default'); return; }
+
+  // Check which are already on the list (undone)
+  const alreadyOnList = new Set(
+    shoppingItems
+      .filter(i => String(i.shopping_list_id) === String(shoppingListId) && String(i.done) !== '1' && i.product_id)
+      .map(i => String(i.product_id))
+  );
+  const toAdd = lowProducts.filter(p => !alreadyOnList.has(p.id));
+  if (toAdd.length === 0) { toast('Alla underlagsvaror finns redan på listan', 'default'); return; }
+
+  const btn = document.getElementById('addLowStockBtn');
+  btn.disabled = true;
+  let added = 0, failed = 0;
+
+  await Promise.all(toAdd.map(async p => {
+    // how much to add to reach min stock
+    const needed = Math.max(0.5, Math.round((p.minStock - p.stock) * 10) / 10);
+    try {
+      await grocyPost('/stock/shoppinglist/add-product', {
+        product_id: parseInt(p.id),
+        list_id: parseInt(shoppingListId),
+        product_amount: needed
+      });
+      added++;
+    } catch {
+      failed++;
+    }
+  }));
+
+  btn.disabled = false;
+  shoppingItems = await grocyGet('/objects/shopping_list');
+  renderShoppingList();
+  toast(
+    failed === 0 ? `${added} vara(or) lades till` : `${added} lades till, ${failed} misslyckades`,
+    failed === 0 ? 'success' : 'error'
+  );
+});
+
+document.getElementById('receiveStockBtn').addEventListener('click', async () => {
+  const pendingItems = shoppingItems.filter(i =>
+    String(i.shopping_list_id) === String(shoppingListId) &&
+    String(i.done) !== '1'
+  );
+  if (pendingItems.length === 0) { toast('Inga varor att kvittera in', 'default'); return; }
+
+  const btn = document.getElementById('receiveStockBtn');
+  btn.disabled = true;
+
+  const withProduct  = pendingItems.filter(i => i.product_id);
+  const freeTextSkip = pendingItems.length - withProduct.length;
+  let added = 0, failed = 0;
+
+  await Promise.all(withProduct.map(async item => {
+    try {
+      await grocyPost(`/stock/products/${item.product_id}/add`, {
+        amount: parseFloat(item.amount) || 1,
+        best_before_date: '2999-12-31',
+        transaction_type: 'purchase'
+      });
+      // mark as done on the list
+      await grocyPut(`/objects/shopping_list/${item.id}`, { ...item, done: 1 });
+      item.done = '1';
+      added++;
+    } catch {
+      failed++;
+    }
+  }));
+
+  // refresh stock levels in memory so inventory tab shows correct data
+  const freshStock = await grocyGet('/stock').catch(() => []);
+  const stockMap = Object.fromEntries(freshStock.map(s => [String(s.product_id), parseFloat(s.amount) || 0]));
+  allProducts.forEach(p => { p.stock = stockMap[p.id] ?? p.stock; });
+
+  btn.disabled = false;
+  renderShoppingList();
+
+  let msg = `${added} vara(or) inkvitterade`;
+  if (freeTextSkip > 0) msg += ` · ${freeTextSkip} fritext hoppades över`;
+  if (failed > 0) msg += ` · ${failed} misslyckades`;
+  toast(msg, failed === 0 ? 'success' : 'error');
 });
 
 // ─────────────────────────────────────────────
@@ -1349,12 +1502,15 @@ function highlightMatch(name, q) {
     esc(name.slice(idx + q.length));
 }
 
+const shopUnitEl = document.getElementById('shopUnit');
+
 function selectSuggestion(idx) {
   const suggs = getSuggestions(shopInput.value);
   const p = suggs[idx];
   if (!p) return;
   selectedProduct = p;
   shopInput.value = p.name;
+  shopUnitEl.textContent = p.unit || 'st';
   shopSugg.classList.add('hidden');
   shopAddBtn.disabled = false;
   shopAmount.focus();
@@ -1364,6 +1520,7 @@ function selectFreeText(text) {
   if (!text) return;
   selectedProduct = null;
   shopInput.value = text;
+  shopUnitEl.textContent = '';
   shopSugg.classList.add('hidden');
   shopAddBtn.disabled = false;
   shopAmount.focus();
@@ -1372,6 +1529,7 @@ function selectFreeText(text) {
 shopInput.addEventListener('input', () => {
   shopQuery = shopInput.value.trim();
   selectedProduct = null;
+  shopUnitEl.textContent = '';
   shopAddBtn.disabled = !shopQuery;
   renderSuggestions(shopQuery);
 });
@@ -1451,6 +1609,7 @@ async function addToShoppingList() {
     toast(`"${name}" lades till`, 'success');
     shopInput.value = '';
     shopAmount.value = '1';
+    shopUnitEl.textContent = '';
     selectedProduct = null;
     shopQuery = '';
     shopSugg.classList.add('hidden');
@@ -1465,6 +1624,88 @@ async function addToShoppingList() {
     shopInput.focus();
   }
 }
+
+// ─────────────────────────────────────────────
+//  Create product from free-text item
+// ─────────────────────────────────────────────
+let cpShopItemId = null;
+
+function openCreateProduct(shopItemId, name) {
+  cpShopItemId = shopItemId;
+  document.getElementById('cpName').value = name;
+
+  const sel = document.getElementById('cpUnit');
+  sel.innerHTML = allUnits.map(u =>
+    `<option value="${u.id}">${esc(u.name)}</option>`
+  ).join('');
+  // try to pre-select a common "pieces" unit
+  const stUnit = allUnits.find(u => /^(st|stk|stück|piece|pcs|styck)/i.test(u.name));
+  if (stUnit) sel.value = stUnit.id;
+
+  document.getElementById('createProductOverlay').classList.remove('hidden');
+  setTimeout(() => document.getElementById('cpName').select(), 50);
+}
+
+document.getElementById('cpCancelBtn').addEventListener('click', () => {
+  document.getElementById('createProductOverlay').classList.add('hidden');
+});
+
+document.getElementById('cpSaveBtn').addEventListener('click', async () => {
+  const name   = document.getElementById('cpName').value.trim();
+  const unitId = parseInt(document.getElementById('cpUnit').value);
+  if (!name)   { toast('Ange ett produktnamn', 'error'); return; }
+  if (!unitId) { toast('Välj en enhet', 'error'); return; }
+
+  const btn = document.getElementById('cpSaveBtn');
+  btn.disabled = true;
+
+  try {
+    // 1. Create the product in Grocy
+    const result = await grocyPost('/objects/products', {
+      name,
+      location_id: null,
+      qu_id_stock: unitId,
+      qu_id_purchase: unitId,
+      min_stock_amount: 0
+    });
+
+    const newProductId = result.created_object_id ?? result.id;
+    if (!newProductId) throw new Error('Grocy returnerade inget produkt-id');
+
+    // 2. Update the shopping list item — link to the new product, clear note
+    const item = shoppingItems.find(i => String(i.id) === String(cpShopItemId));
+    if (item) {
+      await grocyPut(`/objects/shopping_list/${item.id}`, {
+        ...item,
+        product_id: newProductId,
+        note: ''
+      });
+      item.product_id = String(newProductId);
+      item.note = '';
+    }
+
+    // 3. Add to in-memory product list so it shows up immediately
+    const unit = allUnits.find(u => u.id == unitId);
+    allProducts.push({
+      id:       String(newProductId),
+      name,
+      category: '',
+      location: '',
+      unit:     unit ? unit.name : '',
+      minStock: 0,
+      stock:    0
+    });
+    allProducts.sort((a, b) => a.name.localeCompare(b.name, 'sv'));
+
+    document.getElementById('createProductOverlay').classList.add('hidden');
+    renderShoppingList();
+    toast(`"${name}" skapades och kopplades till raden ✓`, 'success');
+  } catch (err) {
+    toast(`Kunde inte skapa produkt: ${err.message}`, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 // ─────────────────────────────────────────────
 //  Refresh button
