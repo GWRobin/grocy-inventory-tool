@@ -480,9 +480,27 @@
     /* ── Responsive ── */
     @media (max-width: 600px) {
       .logo { font-size: 17px; }
-      .product-grid { grid-template-columns: 1fr; }
+      .product-grid {
+        grid-template-columns: 1fr;
+        padding: 0 12px 20px;
+      }
+      .toolbar {
+        margin: 12px auto 10px;
+        padding: 0 12px;
+        gap: 8px;
+      }
+      .toolbar > * { width: 100%; min-width: 0; }
+      .search-wrap { min-width: 0; }
+      .filter-select { width: 100%; }
+      .stats-bar { padding: 0 12px; }
       #saveBar { padding: 12px 16px; }
       .tab-btn span { display: none; }
+      /* Shopping mobile */
+      .shopping-container { padding: 0 12px 20px; }
+      .shopping-input-row { flex-wrap: wrap; }
+      .shop-input-wrap { flex: 0 0 100% !important; width: 100%; }
+      .shop-add-btn { flex: 1; justify-content: center; }
+      .shop-amount-wrap { flex: 0 0 auto; }
     }
   </style>
 </head>
@@ -562,7 +580,10 @@
 
     <!-- Add item -->
     <div class="shopping-add-card">
-      <h2><i class="fas fa-plus" style="color:var(--primary);margin-right:6px"></i>Lägg till vara</h2>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:2px">
+        <h2 style="margin-bottom:0"><i class="fas fa-plus" style="color:var(--primary);margin-right:6px"></i>Lägg till vara</h2>
+        <select id="shoppingListSelect" class="filter-select" style="display:none;font-size:13px;padding:5px 10px"></select>
+      </div>
       <div class="shopping-input-row">
         <div class="shop-input-wrap">
           <input type="text" id="shopInput" placeholder="Sök eller skriv varunamn…"
@@ -1114,14 +1135,36 @@ function updateBadgeEl(badgeEl, stock, minStock, unit) {
 async function loadShoppingList() {
   shopListItems.innerHTML = `<div class="shopping-state"><div class="spinner" style="width:28px;height:28px;border-width:2px"></div></div>`;
   try {
-    // get default list id
+    // fetch available shopping lists
     const lists = await grocyGet('/objects/shopping_lists').catch(() => []);
+    const listSelect = document.getElementById('shoppingListSelect');
+
     if (lists && lists.length > 0) {
-      shoppingListId = lists[0].id;
-      document.getElementById('shoppingListTitle').textContent = lists[0].name || 'Inköpslista';
+      // if current shoppingListId isn't in the list, default to first
+      if (!lists.find(l => String(l.id) === String(shoppingListId))) {
+        shoppingListId = lists[0].id;
+      }
+      const activeList = lists.find(l => String(l.id) === String(shoppingListId)) || lists[0];
+      document.getElementById('shoppingListTitle').textContent = activeList.name || 'Inköpslista';
+
+      if (lists.length > 1) {
+        listSelect.innerHTML = lists.map(l =>
+          `<option value="${l.id}" ${String(l.id) === String(shoppingListId) ? 'selected' : ''}>${esc(l.name)}</option>`
+        ).join('');
+        listSelect.style.display = '';
+        listSelect.onchange = () => {
+          shoppingListId = listSelect.value;
+          const sel = lists.find(l => String(l.id) === String(listSelect.value));
+          if (sel) document.getElementById('shoppingListTitle').textContent = sel.name || 'Inköpslista';
+          renderShoppingList();
+        };
+      } else {
+        listSelect.style.display = 'none';
+      }
     }
 
-    shoppingItems = await grocyGet('/objects/shopping_list_items');
+    // correct entity name: 'shopping_list' (not 'shopping_list_items')
+    shoppingItems = await grocyGet('/objects/shopping_list');
     renderShoppingList();
   } catch (err) {
     shopListItems.innerHTML = `<div class="shopping-state" style="color:var(--danger)"><i class="fas fa-triangle-exclamation"></i><p>${esc(err.message)}</p></div>`;
@@ -1201,7 +1244,7 @@ async function toggleShopItemDone(id, currentlyDone) {
   if (!item) return;
   const newDone = currentlyDone ? 0 : 1;
   try {
-    await grocyPut(`/objects/shopping_list_items/${id}`, { ...item, done: newDone });
+    await grocyPut(`/objects/shopping_list/${id}`, { ...item, done: newDone });
     item.done = String(newDone);
     renderShoppingList();
   } catch (err) {
@@ -1213,7 +1256,7 @@ async function updateShopItemAmount(id, amount) {
   const item = shoppingItems.find(i => String(i.id) === String(id));
   if (!item) return;
   try {
-    await grocyPut(`/objects/shopping_list_items/${id}`, { ...item, amount });
+    await grocyPut(`/objects/shopping_list/${id}`, { ...item, amount });
     item.amount = String(amount);
     shopListMeta.textContent = `Uppdaterat ✓`;
   } catch (err) {
@@ -1223,7 +1266,7 @@ async function updateShopItemAmount(id, amount) {
 
 async function deleteShopItem(id) {
   try {
-    await grocyDelete(`/objects/shopping_list_items/${id}`);
+    await grocyDelete(`/objects/shopping_list/${id}`);
     shoppingItems = shoppingItems.filter(i => String(i.id) !== String(id));
     renderShoppingList();
   } catch (err) {
@@ -1234,7 +1277,7 @@ async function deleteShopItem(id) {
 document.getElementById('clearDoneBtn').addEventListener('click', async () => {
   const doneItems = shoppingItems.filter(i => String(i.done) === '1' && String(i.shopping_list_id) === String(shoppingListId));
   if (doneItems.length === 0) { toast('Inga avbockade att rensa', 'default'); return; }
-  await Promise.all(doneItems.map(i => grocyDelete(`/objects/shopping_list_items/${i.id}`).catch(() => {})));
+  await Promise.all(doneItems.map(i => grocyDelete(`/objects/shopping_list/${i.id}`).catch(() => {})));
   shoppingItems = shoppingItems.filter(i => String(i.done) !== '1');
   renderShoppingList();
   toast(`${doneItems.length} avbockade raderade`, 'success');
@@ -1394,11 +1437,13 @@ async function addToShoppingList() {
         product_amount: amount
       });
     } else {
-      // free text
-      await grocyPost('/objects/shopping_list_items', {
-        shopping_list_id: shoppingListId,
+      // free text — entity is 'shopping_list', done must be 0
+      await grocyPost('/objects/shopping_list', {
+        shopping_list_id: parseInt(shoppingListId),
+        product_id: null,
         amount,
-        note: shopQuery
+        note: shopQuery,
+        done: 0
       });
     }
 
@@ -1411,7 +1456,7 @@ async function addToShoppingList() {
     shopSugg.classList.add('hidden');
 
     // reload list
-    shoppingItems = await grocyGet('/objects/shopping_list_items');
+    shoppingItems = await grocyGet('/objects/shopping_list');
     renderShoppingList();
   } catch (err) {
     toast(`Kunde inte lägga till: ${err.message}`, 'error');
