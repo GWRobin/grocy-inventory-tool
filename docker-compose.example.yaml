@@ -1,0 +1,17 @@
+services:
+  grocy-inventory:
+    image: ghcr.io/DITT-GITHUB-ANVÄNDARNAMN/DITT-REPO:latest
+    container_name: grocy-inventory
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8090:80"
+    environment:
+      - GROCY_URL=https://grocy.ditt-hem.se
+      - GROCY_KEY=din-api-nyckel
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.grocy-inventory.rule=Host(`inventory.ditt-hem.se`)"
+      - "traefik.http.routers.grocy-inventory.entrypoints=websecure"
+      - "traefik.http.routers.grocy-inventory.tls=true"
+      - "traefik.http.routers.grocy-inventory.middlewares=authelia@file"
+      - "traefik.http.services.grocy-inventory.loadbalancer.server.url=http://127.0.0.1:8090"
