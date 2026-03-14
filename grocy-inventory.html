@@ -1138,7 +1138,7 @@ function productCard(p, groupBy) {
 function adjustQty(id, delta) {
   const input = document.getElementById(`qty-${id}`);
   if (!input) return;
-  const next = Math.max(0, Math.round((parseFloat(input.value) || 0 + delta) * 100) / 100);
+  const next = Math.max(0, Math.round(((parseFloat(input.value) || 0) + delta) * 100) / 100);
   input.value = fmt(next);
   markChange(id, next);
 }
