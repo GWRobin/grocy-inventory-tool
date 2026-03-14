@@ -66,6 +66,41 @@ docker compose logs -f
 
 ---
 
+## ForwardAuth & användarsårning (Authelia / Traefik)
+
+Appen har stöd för att spåra **vem som lade till varje rad** på inköpslistan, om du kör med ForwardAuth via Authelia och Traefik.
+
+### Hur det fungerar
+
+När Authelia autentiserar en användare skickar den headern `Remote-User` med inloggat användarnamn vidare till appens nginx-container. nginx injicerar värdet i `config.js` som serveras per request:
+
+```
+window.GROCY_CONFIG = { url: "...", key: "...", user: "robin" };
+```
+
+Appens JavaScript läser `user`-fältet och sparar det i Grocys userfields-API (`/api/userfields/shopping_list/{id}`) varje gång en vara läggs till på listan. När listan visas hämtas userfields i bakgrunden och en diskret rad — *robin · 2024-01-15 14:30* — visas under varunamnet.
+
+Funktionen är helt ofarlig om ForwardAuth inte är konfigurerat: `user` är tom sträng, ingen userfield sparas, och inga extra rader visas.
+
+### Förutsättningar
+
+**1. Traefik + Authelia** måste skicka `Remote-User`-headern till containern. Med Traefik v2 sker det automatiskt via `forwardAuth`-middleware.
+
+**2. Userfield-definitioner i Grocy** måste skapas manuellt (en gång):
+
+Gå till *Inställningar → Användarfält* i Grocy och skapa två fält för entiteten `shopping_list`:
+
+| Namn | Typ |
+|------|-----|
+| `addedby` | Text (short) |
+| `addedat` | Text (short) |
+
+> **OBS:** Grocy tillåter bara bokstäver och siffror i fältnamn — inga understreck.
+
+Utan dessa definitioner misslyckas PUT-anropen tyst — ingen data sparas, inga fel visas.
+
+---
+
 ## CORS
 
 Appen anropar Grocy API direkt från webbläsaren. Om du får CORS-fel behöver du tillåta din apps origin i Grocy-serverns reverse proxy (nginx/Caddy/Traefik):

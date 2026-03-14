@@ -14,12 +14,13 @@ server {
     gzip on;
     gzip_types text/html text/css application/javascript;
 
-    # config.js genereras dynamiskt från miljövariabler (GROCY_URL, GROCY_KEY).
-    # nginx-imagen kör envsubst på den här filen vid containerstart.
+    # config.js genereras dynamiskt per request.
+    # ${GROCY_URL} och ${GROCY_KEY} ersätts av envsubst vid containerstart.
+    # $http_remote_user sätts av nginx per request från Authelia ForwardAuth-headern Remote-User.
     location = /config.js {
-        return 200 'window.GROCY_CONFIG = { url: "${GROCY_URL}", key: "${GROCY_KEY}" };';
-        add_header Content-Type "application/javascript; charset=utf-8";
+        default_type "application/javascript; charset=utf-8";
         add_header Cache-Control "no-cache, no-store, must-revalidate";
+        return 200 'window.GROCY_CONFIG = { url: "${GROCY_URL}", key: "${GROCY_KEY}", user: "$http_remote_user" };';
     }
 
     location / {

@@ -468,6 +468,12 @@
     }
     .create-product-btn:hover { opacity: 1; background: #ebf0ff; }
 
+    /* ── Added-by attribution ── */
+    .shop-item-added-by {
+      font-size: 11px; color: var(--text-light);
+      margin-top: 3px; font-weight: 400; opacity: 0.8;
+    }
+
     /* ── Settings overlay ── */
     .overlay {
       position: fixed; inset: 0;
@@ -748,6 +754,9 @@ let GROCY_URL = (window.GROCY_CONFIG?.url && window.GROCY_CONFIG.url !== '${GROC
   ? window.GROCY_CONFIG.url : (localStorage.getItem(LS_URL) || '');
 let GROCY_KEY = (window.GROCY_CONFIG?.key && window.GROCY_CONFIG.key !== '${GROCY_KEY}')
   ? window.GROCY_CONFIG.key : (localStorage.getItem(LS_KEY) || '');
+// Injected by nginx from Authelia ForwardAuth header Remote-User (empty if not using ForwardAuth)
+const GROCY_USER = (window.GROCY_CONFIG?.user && window.GROCY_CONFIG.user !== '$http_remote_user')
+  ? window.GROCY_CONFIG.user : '';
 
 // ─────────────────────────────────────────────
 //  State – Inventering
@@ -760,10 +769,11 @@ const pendingChanges = new Map();
 // ─────────────────────────────────────────────
 //  State – Shopping
 // ─────────────────────────────────────────────
-let shoppingListId   = 1;
-let shoppingItems    = [];   // raw from API
-let selectedProduct  = null; // { id, name, unit } or null for free-text
-let shopQuery        = '';
+let shoppingListId      = 1;
+let shoppingItems       = [];   // raw from API
+let selectedProduct     = null; // { id, name, unit } or null for free-text
+let shopQuery           = '';
+let shopItemUserfields  = new Map(); // item id → { added_by, added_at } — loaded silently
 
 // ─────────────────────────────────────────────
 //  DOM refs
@@ -1208,6 +1218,52 @@ function updateBadgeEl(badgeEl, stock, minStock, unit) {
 }
 
 // ─────────────────────────────────────────────
+//  Shopping – User tracking helpers
+// ─────────────────────────────────────────────
+
+// Save who added a shopping list item. Silently does nothing if userfields
+// aren't configured in Grocy or if no user is available.
+async function saveShopItemUserfield(itemId) {
+  if (!GROCY_USER || !itemId) {
+    console.debug('[Grocy] saveShopItemUserfield skipped — GROCY_USER:', JSON.stringify(GROCY_USER), 'itemId:', itemId);
+    return;
+  }
+  const now = new Date();
+  const addedAt = now.toLocaleDateString('sv-SE') + ' ' +
+                  now.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
+  try {
+    await grocyPut(`/userfields/shopping_list/${itemId}`, {
+      addedby: GROCY_USER,
+      addedat: addedAt
+    });
+    shopItemUserfields.set(String(itemId), { addedby: GROCY_USER, addedat: addedAt });
+    console.debug('[Grocy] Userfield saved for item', itemId, '— user:', GROCY_USER);
+  } catch (err) {
+    console.error('[Grocy] Userfield save failed for item', itemId, '—', err.message);
+  }
+}
+
+// Fetch userfields for all items in parallel. Never throws. Returns true if
+// at least one item had data (meaning userfields are configured in Grocy).
+async function fetchShopItemUserfields(items) {
+  shopItemUserfields = new Map();
+  if (!items.length) return false;
+  let hasData = false;
+  await Promise.allSettled(items.map(async item => {
+    try {
+      const uf = await grocyGet(`/userfields/shopping_list/${item.id}`);
+      if (uf && (uf.addedby || uf.addedat)) {
+        shopItemUserfields.set(String(item.id), uf);
+        hasData = true;
+      }
+    } catch (err) {
+      console.debug('[Grocy] Userfield fetch failed for item', item.id, '—', err.message);
+    }
+  }));
+  return hasData;
+}
+
+// ─────────────────────────────────────────────
 //  Shopping list – Load
 // ─────────────────────────────────────────────
 async function loadShoppingList() {
@@ -1243,7 +1299,12 @@ async function loadShoppingList() {
 
     // correct entity name: 'shopping_list' (not 'shopping_list_items')
     shoppingItems = await grocyGet('/objects/shopping_list');
-    renderShoppingList();
+    renderShoppingList(); // render immediately without userfield data
+
+    // then fetch userfields in background and re-render only if we got data
+    fetchShopItemUserfields(shoppingItems).then(hasData => {
+      if (hasData) renderShoppingList();
+    }).catch(() => {});
   } catch (err) {
     shopListItems.innerHTML = `<div class="shopping-state" style="color:var(--danger)"><i class="fas fa-triangle-exclamation"></i><p>${esc(err.message)}</p></div>`;
   }
@@ -1270,12 +1331,19 @@ function renderShoppingList() {
     const unit     = prod ? (prod.unit || 'st') : 'st';
     const isDone   = String(item.done) === '1';
     const amt      = parseFloat(item.amount) || 1;
+
+    // Added-by attribution — only shown if userfield data exists for this item
+    const uf = shopItemUserfields.get(String(item.id));
+    const addedByHtml = (uf && (uf.addedby || uf.addedat))
+      ? `<div class="shop-item-added-by">${uf.addedby ? esc(uf.addedby) : ''}${uf.addedby && uf.addedat ? ' · ' : ''}${uf.addedat ? esc(uf.addedat) : ''}</div>`
+      : '';
+
     return `
       <div class="shop-item ${isDone ? 'done' : ''}" id="sitem-${item.id}">
         <button class="shop-item-check" data-id="${item.id}" data-done="${isDone ? '1' : '0'}" title="${isDone ? 'Ångra' : 'Bocka av'}">
           <i class="fas fa-check"></i>
         </button>
-        <div class="shop-item-name">${esc(name)}</div>
+        <div class="shop-item-name">${esc(name)}${addedByHtml}</div>
         <div class="shop-amount-wrap" style="width:auto">
           <button class="shop-item-amt-btn" data-id="${item.id}" data-delta="-1">−</button>
           <input class="shop-item-amount" type="number" step="0.5" min="0.5"
@@ -1602,6 +1670,10 @@ async function addToShoppingList() {
 
   shopAddBtn.disabled = true;
   try {
+    // snapshot existing IDs so we can find the newly created item(s)
+    const prevIds = new Set(shoppingItems.map(i => String(i.id)));
+    let freeTextNewId = null;
+
     if (selectedProduct) {
       // known product — use the dedicated endpoint (handles duplicates gracefully)
       await grocyPost('/stock/shoppinglist/add-product', {
@@ -1611,13 +1683,14 @@ async function addToShoppingList() {
       });
     } else {
       // free text — entity is 'shopping_list', done must be 0
-      await grocyPost('/objects/shopping_list', {
+      const result = await grocyPost('/objects/shopping_list', {
         shopping_list_id: parseInt(shoppingListId),
         product_id: null,
         amount,
         note: shopQuery,
         done: 0
       });
+      freeTextNewId = result.created_object_id ?? result.id ?? null;
     }
 
     const name = selectedProduct ? selectedProduct.name : shopQuery;
@@ -1632,6 +1705,23 @@ async function addToShoppingList() {
     // reload list
     shoppingItems = await grocyGet('/objects/shopping_list');
     renderShoppingList();
+
+    // save userfields for new items (silently — won't generate errors if not configured)
+    if (GROCY_USER) {
+      if (freeTextNewId) {
+        saveShopItemUserfield(freeTextNewId).then(() => renderShoppingList()).catch(() => {});
+      } else {
+        // find items that appeared after the add
+        const newItems = shoppingItems.filter(i =>
+          String(i.shopping_list_id) === String(shoppingListId) && !prevIds.has(String(i.id))
+        );
+        if (newItems.length > 0) {
+          Promise.all(newItems.map(i => saveShopItemUserfield(i.id)))
+            .then(() => renderShoppingList())
+            .catch(() => {});
+        }
+      }
+    }
   } catch (err) {
     toast(`Kunde inte lägga till: ${err.message}`, 'error');
   } finally {
@@ -1761,6 +1851,7 @@ function esc(s) {
 // ─────────────────────────────────────────────
 const configFromEnv = !!(window.GROCY_CONFIG?.url && window.GROCY_CONFIG.url !== '${GROCY_URL}');
 if (configFromEnv) document.getElementById('settingsBtn').style.display = 'none';
+console.debug('[Grocy] GROCY_USER from ForwardAuth:', JSON.stringify(GROCY_USER) || '(tom — ForwardAuth ej konfigurerat)');
 
 if (!GROCY_URL || !GROCY_KEY) {
   openSettings();
