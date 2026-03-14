@@ -148,6 +148,8 @@
       box-shadow: var(--shadow);
       transition: box-shadow .15s, border-color .15s;
       display: flex; flex-direction: column; gap: 10px;
+      min-width: 0;        /* prevent grid blowout */
+      overflow: hidden;    /* clip any overflow content */
     }
     .product-card:hover { box-shadow: var(--shadow-lg); }
     .product-card.dirty { border-color: var(--warning-border); background: var(--warning-light); }
@@ -158,7 +160,7 @@
       100% { transform: scale(1); }
     }
     .card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
-    .product-name { font-size: 15px; font-weight: 600; line-height: 1.3; }
+    .product-name { font-size: 15px; font-weight: 600; line-height: 1.3; word-break: break-word; min-width: 0; }
     .product-category {
       font-size: 11px; color: var(--text-muted);
       background: var(--surface2); border: 1px solid var(--border);
@@ -197,7 +199,11 @@
     .qty-input::-webkit-inner-spin-button,
     .qty-input::-webkit-outer-spin-button { -webkit-appearance: none; }
     .qty-input[type=number] { -moz-appearance: textfield; }
-    .qty-unit { font-size: 13px; font-weight: 600; color: var(--text-muted); flex-shrink: 0; min-width: 24px; }
+    .qty-unit {
+      font-size: 12px; font-weight: 600; color: var(--text-muted);
+      padding: 0 8px 0 2px; flex-shrink: 0;
+      max-width: 52px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
     .dirty-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warning); flex-shrink: 0; display: none; }
     .product-card.dirty .dirty-dot { display: block; }
     .product-location {
@@ -1104,9 +1110,9 @@ function productCard(p, groupBy) {
           <div class="dirty-dot"></div>
           <div class="product-name">${esc(p.name)}</div>
         </div>
-        <div style="display:flex;gap:4px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
-          ${showLocation ? `<div class="product-location"><i class="fas fa-location-dot" style="font-size:9px"></i> ${esc(p.location)}</div>` : ''}
-          ${showCategory ? `<div class="product-category">${esc(p.category)}</div>` : ''}
+        <div style="display:flex;gap:4px;flex-shrink:1;flex-wrap:wrap;justify-content:flex-end;min-width:0;max-width:60%">
+          ${showLocation ? `<div class="product-location" style="overflow:hidden;text-overflow:ellipsis;max-width:100%"><i class="fas fa-location-dot" style="font-size:9px"></i> ${esc(p.location)}</div>` : ''}
+          ${showCategory ? `<div class="product-category" style="overflow:hidden;text-overflow:ellipsis;max-width:100%">${esc(p.category)}</div>` : ''}
         </div>
       </div>
       <div class="stock-row">
@@ -1123,8 +1129,8 @@ function productCard(p, groupBy) {
             id="qty-${p.id}" data-id="${p.id}"
             value="${inputVal}" data-original="${p.stock}" />
           <button class="qty-btn qty-btn-plus" data-id="${p.id}">+</button>
+          <span class="qty-unit">${esc(unitLabel)}</span>
         </div>
-        <span class="qty-unit">${esc(unitLabel)}</span>
       </div>
     </div>`;
 }
