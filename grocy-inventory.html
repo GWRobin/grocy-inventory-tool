@@ -3,9 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Grocy – Inventering</title>
-  <!-- Konfiguration injicerad av Docker via miljövariabler. -->
-  <!-- Filen saknas vid lokal utveckling utan Docker – det är OK. -->
+  <title>Grocy</title>
   <script src="/config.js" onerror="window.GROCY_CONFIG={}"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js" crossorigin="anonymous"></script>
   <style>
@@ -39,7 +37,6 @@
       background: var(--bg);
       color: var(--text);
       min-height: 100vh;
-      /* bottom padding so sticky bar never covers last card */
       padding-bottom: 100px;
     }
 
@@ -57,10 +54,25 @@
       z-index: 100;
       box-shadow: 0 1px 4px rgba(0,0,0,.06);
     }
-    .header-left { display: flex; align-items: center; gap: 12px; }
-    .logo { font-size: 20px; font-weight: 700; color: var(--primary); letter-spacing: -.4px; }
-    .logo span { color: var(--text); font-weight: 400; }
+    .header-left { display: flex; align-items: center; gap: 16px; }
+    .logo { font-size: 20px; font-weight: 700; color: var(--primary); letter-spacing: -.4px; flex-shrink: 0; }
     .header-right { display: flex; align-items: center; gap: 10px; }
+
+    /* ── Tab navigation ── */
+    .tab-nav { display: flex; gap: 4px; }
+    .tab-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 14px; border-radius: var(--radius-sm);
+      font-size: 14px; font-weight: 500; cursor: pointer;
+      border: none; background: transparent;
+      color: var(--text-muted); transition: all .15s;
+    }
+    .tab-btn:hover { background: var(--surface2); color: var(--text); }
+    .tab-btn.active {
+      background: var(--primary); color: #fff;
+    }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
 
     /* ── Buttons ── */
     .btn {
@@ -71,27 +83,21 @@
     }
     .btn-primary { background: var(--primary); color: #fff; }
     .btn-primary:hover:not(:disabled) { background: var(--primary-dark); }
-    .btn-ghost {
-      background: transparent; color: var(--text-muted);
-      border: 1px solid var(--border);
-    }
+    .btn-ghost { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
     .btn-ghost:hover { background: var(--surface2); color: var(--text); }
     .btn-sm { padding: 6px 12px; font-size: 13px; }
     .btn:disabled { opacity: .45; cursor: not-allowed; }
 
-    /* ── Search / filter bar ── */
+    /* ── Toolbar ── */
     .toolbar {
       max-width: 1100px; margin: 24px auto 16px;
       padding: 0 20px;
       display: flex; gap: 12px; flex-wrap: wrap; align-items: center;
     }
-    .search-wrap {
-      flex: 1; min-width: 200px; position: relative;
-    }
+    .search-wrap { flex: 1; min-width: 200px; position: relative; }
     .search-wrap i {
       position: absolute; left: 12px; top: 50%;
-      transform: translateY(-50%); color: var(--text-light);
-      pointer-events: none;
+      transform: translateY(-50%); color: var(--text-light); pointer-events: none;
     }
     .search-wrap input {
       width: 100%; padding: 9px 12px 9px 36px;
@@ -110,8 +116,7 @@
     /* ── Stats bar ── */
     .stats-bar {
       max-width: 1100px; margin: 0 auto 20px;
-      padding: 0 20px;
-      display: flex; gap: 12px; flex-wrap: wrap;
+      padding: 0 20px; display: flex; gap: 12px; flex-wrap: wrap;
     }
     .stat-chip {
       background: var(--surface); border: 1px solid var(--border);
@@ -140,40 +145,21 @@
       display: flex; flex-direction: column; gap: 10px;
     }
     .product-card:hover { box-shadow: var(--shadow-lg); }
-
-    /* dirty = has unsaved changes */
-    .product-card.dirty {
-      border-color: var(--warning-border);
-      background: var(--warning-light);
-    }
-    /* saved flash */
-    .product-card.saved-flash {
-      border-color: var(--success-border);
-      background: var(--success-light);
-      animation: pop .35s ease;
-    }
+    .product-card.dirty { border-color: var(--warning-border); background: var(--warning-light); }
+    .product-card.saved-flash { border-color: var(--success-border); background: var(--success-light); animation: pop .35s ease; }
     @keyframes pop {
       0%   { transform: scale(.985); }
       50%  { transform: scale(1.01); }
       100% { transform: scale(1); }
     }
-
-    .card-top {
-      display: flex; align-items: flex-start;
-      justify-content: space-between; gap: 8px;
-    }
+    .card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
     .product-name { font-size: 15px; font-weight: 600; line-height: 1.3; }
     .product-category {
       font-size: 11px; color: var(--text-muted);
       background: var(--surface2); border: 1px solid var(--border);
-      border-radius: 100px; padding: 2px 8px; white-space: nowrap;
-      flex-shrink: 0;
+      border-radius: 100px; padding: 2px 8px; white-space: nowrap; flex-shrink: 0;
     }
-
-    /* stock row: badge + quick + button */
-    .stock-row {
-      display: flex; align-items: center; gap: 8px;
-    }
+    .stock-row { display: flex; align-items: center; gap: 8px; }
     .stock-badge {
       display: inline-flex; align-items: center; gap: 5px;
       font-size: 13px; font-weight: 600;
@@ -182,26 +168,14 @@
     .stock-ok   { background: #ebf8ff; color: #2b6cb0; }
     .stock-low  { background: #fffaf0; color: #c05621; }
     .stock-zero { background: #fff5f5; color: #c53030; }
-
     .stock-label { font-size: 12px; color: var(--text-muted); }
-
-
-    /* fine-tune row: − input + unit */
-    .card-input-row {
-      display: flex; align-items: center; gap: 8px;
-    }
+    .card-input-row { display: flex; align-items: center; gap: 8px; }
     .qty-input-wrap {
-      display: flex; align-items: center; gap: 0;
+      display: flex; align-items: center;
       border: 1.5px solid var(--border); border-radius: var(--radius-sm);
       overflow: hidden; background: var(--surface); flex: 1;
     }
-    .product-card.dirty .qty-input-wrap {
-      border-color: var(--warning);
-    }
-    .qty-unit {
-      font-size: 13px; font-weight: 600; color: var(--text-muted);
-      flex-shrink: 0; min-width: 24px;
-    }
+    .product-card.dirty .qty-input-wrap { border-color: var(--warning); }
     .qty-btn {
       width: 38px; height: 38px; border: none;
       background: var(--surface2); color: var(--text-muted);
@@ -213,26 +187,45 @@
     .qty-input {
       flex: 1; border: none; background: transparent;
       text-align: center; font-size: 16px; font-weight: 700;
-      color: var(--text); outline: none; padding: 0; height: 38px;
-      min-width: 0;
+      color: var(--text); outline: none; padding: 0; height: 38px; min-width: 0;
     }
     .qty-input::-webkit-inner-spin-button,
     .qty-input::-webkit-outer-spin-button { -webkit-appearance: none; }
     .qty-input[type=number] { -moz-appearance: textfield; }
-
-    /* dirty indicator dot on card */
-    .dirty-dot {
-      width: 8px; height: 8px; border-radius: 50%;
-      background: var(--warning); flex-shrink: 0;
-      display: none;
-    }
+    .qty-unit { font-size: 13px; font-weight: 600; color: var(--text-muted); flex-shrink: 0; min-width: 24px; }
+    .dirty-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warning); flex-shrink: 0; display: none; }
     .product-card.dirty .dirty-dot { display: block; }
+    .product-location {
+      font-size: 11px; color: var(--primary);
+      background: #ebf0ff; border: 1px solid #c3d0fc;
+      border-radius: 100px; padding: 2px 8px; white-space: nowrap; flex-shrink: 0;
+    }
 
-    /* ── Sticky bottom save bar ── */
+    /* ── Group header ── */
+    .group-header {
+      grid-column: 1 / -1;
+      display: flex; align-items: center; gap: 10px;
+      padding: 6px 2px 8px; margin-top: 10px;
+      border-bottom: 2px solid var(--border);
+    }
+    .group-header:first-child { margin-top: 0; }
+    .group-header-icon {
+      width: 28px; height: 28px; border-radius: 8px;
+      background: var(--primary); color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; flex-shrink: 0;
+    }
+    .group-header-name { font-size: 14px; font-weight: 700; color: var(--text); letter-spacing: -.2px; }
+    .group-header-count {
+      font-size: 12px; color: var(--text-muted);
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 100px; padding: 1px 8px;
+    }
+
+    /* ── Sticky save bar ── */
     #saveBar {
       position: fixed; bottom: 0; left: 0; right: 0;
-      background: var(--surface);
-      border-top: 1px solid var(--border);
+      background: var(--surface); border-top: 1px solid var(--border);
       box-shadow: 0 -4px 20px rgba(0,0,0,.1);
       padding: 14px 24px;
       display: flex; align-items: center; justify-content: space-between;
@@ -245,10 +238,8 @@
     .save-bar-info b { color: var(--warning); }
     .save-bar-actions { display: flex; gap: 10px; align-items: center; }
     .discard-btn {
-      background: none; border: none;
-      color: var(--text-muted); font-size: 13px;
-      cursor: pointer; text-decoration: underline;
-      text-underline-offset: 2px; padding: 4px;
+      background: none; border: none; color: var(--text-muted); font-size: 13px;
+      cursor: pointer; text-decoration: underline; text-underline-offset: 2px; padding: 4px;
     }
     .discard-btn:hover { color: var(--danger); }
     #saveAllBtn {
@@ -260,10 +251,176 @@
     }
     #saveAllBtn:hover:not(:disabled) { background: #2f855a; }
     #saveAllBtn:disabled { opacity: .5; cursor: not-allowed; }
-    .save-progress {
-      font-size: 12px; color: var(--text-muted);
-      min-width: 80px; text-align: right;
+    .save-progress { font-size: 12px; color: var(--text-muted); min-width: 80px; text-align: right; }
+
+    /* ── Shopping tab ── */
+    .shopping-container {
+      max-width: 700px; margin: 24px auto;
+      padding: 0 20px 20px;
+      display: flex; flex-direction: column; gap: 20px;
     }
+
+    /* Add-row */
+    .shopping-add-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 18px;
+      box-shadow: var(--shadow);
+      display: flex; flex-direction: column; gap: 12px;
+    }
+    .shopping-add-card h2 { font-size: 15px; font-weight: 700; color: var(--text); }
+    .shopping-input-row { display: flex; gap: 8px; align-items: flex-start; }
+    .shop-input-wrap { flex: 1; position: relative; }
+    .shop-input-wrap input {
+      width: 100%; padding: 10px 14px;
+      border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+      font-size: 15px; color: var(--text); outline: none;
+      transition: border-color .15s; background: var(--surface);
+    }
+    .shop-input-wrap input:focus { border-color: var(--primary); }
+
+    /* Autocomplete dropdown */
+    .suggestions-dropdown {
+      position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); box-shadow: var(--shadow-lg);
+      z-index: 50; overflow: hidden; max-height: 260px; overflow-y: auto;
+    }
+    .suggestions-dropdown.hidden { display: none; }
+    .suggestion-item {
+      padding: 10px 14px; cursor: pointer;
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 8px; font-size: 14px; transition: background .1s;
+    }
+    .suggestion-item:hover, .suggestion-item.focused {
+      background: var(--surface2);
+    }
+    .suggestion-name { font-weight: 500; }
+    .suggestion-meta { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+    .suggestion-stock { font-size: 12px; padding: 1px 8px; border-radius: 100px; }
+    .suggestion-divider {
+      padding: 6px 14px; font-size: 11px; font-weight: 700;
+      color: var(--text-light); text-transform: uppercase; letter-spacing: .5px;
+      background: var(--surface2); border-top: 1px solid var(--border);
+    }
+    .free-text-item {
+      padding: 10px 14px; cursor: pointer;
+      display: flex; align-items: center; gap: 10px;
+      font-size: 14px; color: var(--text-muted);
+      transition: background .1s; border-top: 1px solid var(--border);
+    }
+    .free-text-item:hover { background: var(--surface2); color: var(--text); }
+
+    .shop-amount-wrap {
+      display: flex; align-items: center;
+      border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+      overflow: hidden; background: var(--surface); width: 110px; flex-shrink: 0;
+    }
+    .shop-amount-wrap input {
+      flex: 1; border: none; background: transparent;
+      text-align: center; font-size: 15px; font-weight: 700;
+      color: var(--text); outline: none; padding: 0; height: 42px; min-width: 0;
+    }
+    .shop-amount-wrap input::-webkit-inner-spin-button,
+    .shop-amount-wrap input::-webkit-outer-spin-button { -webkit-appearance: none; }
+    .shop-amount-wrap input[type=number] { -moz-appearance: textfield; }
+    .shop-qty-btn {
+      width: 36px; height: 42px; border: none;
+      background: var(--surface2); color: var(--text-muted);
+      font-size: 18px; cursor: pointer; flex-shrink: 0;
+      transition: background .1s;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .shop-qty-btn:hover { background: var(--border); color: var(--text); }
+    .shop-add-btn {
+      height: 42px; padding: 0 18px;
+      background: var(--primary); color: #fff;
+      border: none; border-radius: var(--radius-sm);
+      font-size: 14px; font-weight: 600; cursor: pointer;
+      transition: background .15s; display: flex; align-items: center; gap: 6px;
+      white-space: nowrap; flex-shrink: 0;
+    }
+    .shop-add-btn:hover { background: var(--primary-dark); }
+    .shop-add-btn:disabled { opacity: .45; cursor: not-allowed; }
+
+    /* Shopping list */
+    .shopping-list-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .shopping-list-header {
+      padding: 14px 18px;
+      display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+    }
+    .shopping-list-title { font-size: 15px; font-weight: 700; }
+    .shopping-list-meta { font-size: 13px; color: var(--text-muted); }
+    .clear-done-btn {
+      font-size: 12px; color: var(--text-muted); background: none; border: none;
+      cursor: pointer; padding: 4px 8px; border-radius: 6px; transition: all .12s;
+    }
+    .clear-done-btn:hover { background: var(--surface2); color: var(--danger); }
+
+    /* List items */
+    .shop-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--border);
+      transition: background .1s;
+    }
+    .shop-item:last-child { border-bottom: none; }
+    .shop-item:hover { background: var(--surface2); }
+    .shop-item.done { opacity: .5; }
+
+    .shop-item-check {
+      width: 22px; height: 22px; border-radius: 50%;
+      border: 2px solid var(--border); cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; transition: all .15s; background: transparent;
+    }
+    .shop-item-check:hover { border-color: var(--success); }
+    .shop-item.done .shop-item-check {
+      background: var(--success); border-color: var(--success); color: #fff;
+    }
+    .shop-item-check i { font-size: 11px; display: none; }
+    .shop-item.done .shop-item-check i { display: block; }
+
+    .shop-item-name {
+      flex: 1; font-size: 14px; font-weight: 500; min-width: 0;
+    }
+    .shop-item.done .shop-item-name { text-decoration: line-through; color: var(--text-muted); }
+    .shop-item-note { font-size: 12px; color: var(--text-muted); }
+
+    .shop-item-amount-wrap {
+      display: flex; align-items: center;
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      overflow: hidden; background: var(--surface);
+    }
+    .shop-item-amount-wrap input {
+      width: 44px; border: none; background: transparent;
+      text-align: center; font-size: 13px; font-weight: 600;
+      color: var(--text); outline: none; padding: 0; height: 30px;
+    }
+    .shop-item-amount-wrap input::-webkit-inner-spin-button,
+    .shop-item-amount-wrap input::-webkit-outer-spin-button { -webkit-appearance: none; }
+    .shop-item-amount-wrap input[type=number] { -moz-appearance: textfield; }
+    .shop-item-amt-btn {
+      width: 26px; height: 30px; border: none;
+      background: var(--surface2); color: var(--text-muted);
+      font-size: 14px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background .1s;
+    }
+    .shop-item-amt-btn:hover { background: var(--border); }
+    .shop-item-unit { font-size: 12px; color: var(--text-muted); padding: 0 6px; flex-shrink: 0; }
+
+    .shop-item-delete {
+      width: 30px; height: 30px; border: none; background: none;
+      color: var(--text-light); cursor: pointer; border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; transition: all .12s; font-size: 13px;
+    }
+    .shop-item-delete:hover { background: #fff5f5; color: var(--danger); }
 
     /* ── Settings overlay ── */
     .overlay {
@@ -285,8 +442,7 @@
     .form-group input {
       width: 100%; padding: 10px 12px;
       border: 1px solid var(--border); border-radius: var(--radius-sm);
-      font-size: 14px; color: var(--text); outline: none;
-      transition: border-color .15s;
+      font-size: 14px; color: var(--text); outline: none; transition: border-color .15s;
     }
     .form-group input:focus { border-color: var(--primary); }
     .form-group .hint { font-size: 12px; color: var(--text-muted); margin-top: 5px; }
@@ -299,13 +455,12 @@
     }
     .state-container i { font-size: 40px; margin-bottom: 16px; opacity: .4; display: block; }
     .state-container p { font-size: 15px; }
+    .shopping-state { text-align: center; padding: 40px 20px; color: var(--text-muted); }
+    .shopping-state i { font-size: 36px; opacity: .35; margin-bottom: 12px; display: block; }
     .spinner {
       width: 36px; height: 36px;
-      border: 3px solid var(--border);
-      border-top-color: var(--primary);
-      border-radius: 50%;
-      animation: spin .7s linear infinite;
-      margin: 0 auto 16px;
+      border: 3px solid var(--border); border-top-color: var(--primary);
+      border-radius: 50%; animation: spin .7s linear infinite; margin: 0 auto 16px;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -322,44 +477,12 @@
     #toast.success { background: var(--success); }
     #toast.error   { background: var(--danger); }
 
-    /* ── Group header (spans all columns in grid) ── */
-    .group-header {
-      grid-column: 1 / -1;
-      display: flex; align-items: center; gap: 10px;
-      padding: 6px 2px 8px;
-      margin-top: 10px;
-      border-bottom: 2px solid var(--border);
-    }
-    .group-header:first-child { margin-top: 0; }
-    .group-header-icon {
-      width: 28px; height: 28px; border-radius: 8px;
-      background: var(--primary); color: #fff;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 12px; flex-shrink: 0;
-    }
-    .group-header-name {
-      font-size: 14px; font-weight: 700; color: var(--text);
-      letter-spacing: -.2px;
-    }
-    .group-header-count {
-      font-size: 12px; color: var(--text-muted);
-      background: var(--surface2); border: 1px solid var(--border);
-      border-radius: 100px; padding: 1px 8px;
-    }
-
-    /* ── Location badge on card ── */
-    .product-location {
-      font-size: 11px; color: var(--primary);
-      background: #ebf0ff; border: 1px solid #c3d0fc;
-      border-radius: 100px; padding: 2px 8px; white-space: nowrap;
-      flex-shrink: 0;
-    }
-
     /* ── Responsive ── */
     @media (max-width: 600px) {
       .logo { font-size: 17px; }
       .product-grid { grid-template-columns: 1fr; }
       #saveBar { padding: 12px 16px; }
+      .tab-btn span { display: none; }
     }
   </style>
 </head>
@@ -368,11 +491,19 @@
 <!-- ── Header ── -->
 <header>
   <div class="header-left">
-    <div class="logo">Grocy <span>Inventering</span></div>
+    <div class="logo">Grocy</div>
+    <nav class="tab-nav">
+      <button class="tab-btn active" data-tab="inventory">
+        <i class="fas fa-boxes-stacked"></i> <span>Inventering</span>
+      </button>
+      <button class="tab-btn" data-tab="shopping">
+        <i class="fas fa-cart-shopping"></i> <span>Inköpslista</span>
+      </button>
+    </nav>
   </div>
   <div class="header-right">
-    <button class="btn btn-ghost btn-sm" id="refreshBtn" title="Uppdatera lager">
-      <i class="fas fa-rotate-right"></i> Uppdatera
+    <button class="btn btn-ghost btn-sm" id="refreshBtn" title="Uppdatera">
+      <i class="fas fa-rotate-right"></i>
     </button>
     <button class="btn btn-ghost btn-sm" id="settingsBtn" title="Inställningar">
       <i class="fas fa-gear"></i>
@@ -380,45 +511,97 @@
   </div>
 </header>
 
-<!-- ── Toolbar ── -->
-<div class="toolbar">
-  <div class="search-wrap">
-    <i class="fas fa-search"></i>
-    <input type="text" id="searchInput" placeholder="Sök produkt…" />
+<!-- ══════════════════════════════════════════
+     FLIK: INVENTERING
+══════════════════════════════════════════ -->
+<div id="tab-inventory" class="tab-content active">
+
+  <div class="toolbar">
+    <div class="search-wrap">
+      <i class="fas fa-search"></i>
+      <input type="text" id="searchInput" placeholder="Sök produkt…" />
+    </div>
+    <select class="filter-select" id="categoryFilter">
+      <option value="">Alla kategorier</option>
+    </select>
+    <select class="filter-select" id="stockFilter">
+      <option value="">Allt lager</option>
+      <option value="zero">Slut (0)</option>
+      <option value="low">Lågt lager</option>
+      <option value="ok">I lager</option>
+    </select>
+    <select class="filter-select" id="sortSelect">
+      <option value="name">Sortera: Namn</option>
+      <option value="location">Sortera: Plats</option>
+      <option value="category">Sortera: Kategori</option>
+    </select>
+    <select class="filter-select" id="groupSelect">
+      <option value="">Ingen gruppering</option>
+      <option value="location">Gruppera: Plats</option>
+      <option value="category">Gruppera: Kategori</option>
+    </select>
   </div>
-  <select class="filter-select" id="categoryFilter">
-    <option value="">Alla kategorier</option>
-  </select>
-  <select class="filter-select" id="stockFilter">
-    <option value="">Allt lager</option>
-    <option value="zero">Slut (0)</option>
-    <option value="low">Lågt lager</option>
-    <option value="ok">I lager</option>
-  </select>
-  <select class="filter-select" id="sortSelect">
-    <option value="name">Sortera: Namn</option>
-    <option value="location">Sortera: Plats</option>
-    <option value="category">Sortera: Kategori</option>
-  </select>
-  <select class="filter-select" id="groupSelect">
-    <option value="">Ingen gruppering</option>
-    <option value="location">Gruppera: Plats</option>
-    <option value="category">Gruppera: Kategori</option>
-  </select>
-</div>
 
-<!-- ── Stats ── -->
-<div class="stats-bar" id="statsBar"></div>
+  <div class="stats-bar" id="statsBar"></div>
 
-<!-- ── Product grid ── -->
-<div class="product-grid" id="productGrid">
-  <div class="state-container">
-    <div class="spinner"></div>
-    <p>Laddar produkter…</p>
+  <div class="product-grid" id="productGrid">
+    <div class="state-container">
+      <div class="spinner"></div>
+      <p>Laddar produkter…</p>
+    </div>
   </div>
-</div>
 
-<!-- ── Sticky save bar ── -->
+</div><!-- /tab-inventory -->
+
+<!-- ══════════════════════════════════════════
+     FLIK: INKÖPSLISTA
+══════════════════════════════════════════ -->
+<div id="tab-shopping" class="tab-content">
+
+  <div class="shopping-container">
+
+    <!-- Add item -->
+    <div class="shopping-add-card">
+      <h2><i class="fas fa-plus" style="color:var(--primary);margin-right:6px"></i>Lägg till vara</h2>
+      <div class="shopping-input-row">
+        <div class="shop-input-wrap">
+          <input type="text" id="shopInput" placeholder="Sök eller skriv varunamn…"
+            autocomplete="off" spellcheck="false" />
+          <div id="shopSuggestions" class="suggestions-dropdown hidden"></div>
+        </div>
+        <div class="shop-amount-wrap">
+          <button class="shop-qty-btn" id="shopAmtMinus">−</button>
+          <input type="number" id="shopAmount" value="1" min="0.5" step="0.5" />
+          <button class="shop-qty-btn" id="shopAmtPlus">+</button>
+        </div>
+        <button class="shop-add-btn" id="shopAddBtn" disabled>
+          <i class="fas fa-plus"></i> Lägg till
+        </button>
+      </div>
+    </div>
+
+    <!-- Current list -->
+    <div class="shopping-list-card" id="shoppingListCard">
+      <div class="shopping-list-header">
+        <div>
+          <div class="shopping-list-title" id="shoppingListTitle">Inköpslista</div>
+          <div class="shopping-list-meta" id="shoppingListMeta">Laddar…</div>
+        </div>
+        <button class="clear-done-btn" id="clearDoneBtn" title="Ta bort avbockade">
+          <i class="fas fa-broom"></i> Rensa avbockade
+        </button>
+      </div>
+      <div id="shoppingListItems">
+        <div class="shopping-state">
+          <div class="spinner" style="width:28px;height:28px;border-width:2px"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div><!-- /tab-shopping -->
+
+<!-- ── Sticky save bar (inventering) ── -->
 <div id="saveBar">
   <div class="save-bar-info">
     <b id="changeCount">0</b> produkt(er) har ändrats
@@ -440,7 +623,7 @@
     <div class="form-group">
       <label>Grocy URL</label>
       <input type="url" id="cfgUrl" placeholder="https://grocy.example.com" autocomplete="off" />
-      <div class="hint">Ingen avslutande snedstreck. Exempel: <code>https://grocy.ditt-hem.se</code></div>
+      <div class="hint">Ingen avslutande snedstreck.</div>
     </div>
     <div class="form-group">
       <label>API-nyckel</label>
@@ -464,41 +647,50 @@
 const LS_URL = 'grocy_url';
 const LS_KEY = 'grocy_key';
 
-// Miljövariabler injicerade via config.js har högst prioritet.
-// localStorage används som fallback (manuell inmatning i inställningar).
 let GROCY_URL = (window.GROCY_CONFIG?.url && window.GROCY_CONFIG.url !== '${GROCY_URL}')
-  ? window.GROCY_CONFIG.url
-  : (localStorage.getItem(LS_URL) || '');
+  ? window.GROCY_CONFIG.url : (localStorage.getItem(LS_URL) || '');
 let GROCY_KEY = (window.GROCY_CONFIG?.key && window.GROCY_CONFIG.key !== '${GROCY_KEY}')
-  ? window.GROCY_CONFIG.key
-  : (localStorage.getItem(LS_KEY) || '');
+  ? window.GROCY_CONFIG.key : (localStorage.getItem(LS_KEY) || '');
 
 // ─────────────────────────────────────────────
-//  State
+//  State – Inventering
 // ─────────────────────────────────────────────
-let allProducts  = [];  // { id, name, category, location, unit, minStock, stock }
+let allProducts  = [];
 let filteredList = [];
-// Map<productId, newAmount>  – tracks unsaved changes
 const pendingChanges = new Map();
+
+// ─────────────────────────────────────────────
+//  State – Shopping
+// ─────────────────────────────────────────────
+let shoppingListId   = 1;
+let shoppingItems    = [];   // raw from API
+let selectedProduct  = null; // { id, name, unit } or null for free-text
+let shopQuery        = '';
 
 // ─────────────────────────────────────────────
 //  DOM refs
 // ─────────────────────────────────────────────
-const grid         = document.getElementById('productGrid');
-const searchInput  = document.getElementById('searchInput');
-const catFilter    = document.getElementById('categoryFilter');
-const stockFilter  = document.getElementById('stockFilter');
-const statsBar     = document.getElementById('statsBar');
-const overlay      = document.getElementById('settingsOverlay');
-const cfgUrl       = document.getElementById('cfgUrl');
-const cfgKey       = document.getElementById('cfgKey');
-const saveBar      = document.getElementById('saveBar');
-const changeCount  = document.getElementById('changeCount');
-const saveAllBtn   = document.getElementById('saveAllBtn');
-const discardBtn   = document.getElementById('discardBtn');
-const saveProgress = document.getElementById('saveProgress');
-const sortSelect   = document.getElementById('sortSelect');
-const groupSelect  = document.getElementById('groupSelect');
+const grid          = document.getElementById('productGrid');
+const searchInput   = document.getElementById('searchInput');
+const catFilter     = document.getElementById('categoryFilter');
+const stockFilter   = document.getElementById('stockFilter');
+const sortSelect    = document.getElementById('sortSelect');
+const groupSelect   = document.getElementById('groupSelect');
+const statsBar      = document.getElementById('statsBar');
+const overlay       = document.getElementById('settingsOverlay');
+const cfgUrl        = document.getElementById('cfgUrl');
+const cfgKey        = document.getElementById('cfgKey');
+const saveBar       = document.getElementById('saveBar');
+const changeCount   = document.getElementById('changeCount');
+const saveAllBtn    = document.getElementById('saveAllBtn');
+const discardBtn    = document.getElementById('discardBtn');
+const saveProgress  = document.getElementById('saveProgress');
+const shopInput     = document.getElementById('shopInput');
+const shopSugg      = document.getElementById('shopSuggestions');
+const shopAmount    = document.getElementById('shopAmount');
+const shopAddBtn    = document.getElementById('shopAddBtn');
+const shopListItems = document.getElementById('shoppingListItems');
+const shopListMeta  = document.getElementById('shoppingListMeta');
 
 // ─────────────────────────────────────────────
 //  Toast
@@ -511,6 +703,25 @@ function toast(msg, type = 'default') {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.className = '', 2600);
 }
+
+// ─────────────────────────────────────────────
+//  Tab switching
+// ─────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === `tab-${name}`));
+  // hide save bar when on shopping tab
+  if (name === 'shopping') {
+    saveBar.classList.remove('visible');
+    loadShoppingList();
+  } else {
+    if (pendingChanges.size > 0) saveBar.classList.add('visible');
+  }
+}
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+});
 
 // ─────────────────────────────────────────────
 //  Settings overlay
@@ -552,23 +763,35 @@ async function grocyGet(path) {
 async function grocyPost(path, body) {
   const r = await fetch(`${GROCY_URL}/api${path}`, {
     method: 'POST',
-    headers: {
-      'GROCY-API-KEY': GROCY_KEY,
-      'Content-Type': 'application/json',
-      'Accept': 'application/json'
-    },
+    headers: { 'GROCY-API-KEY': GROCY_KEY, 'Content-Type': 'application/json', 'Accept': 'application/json' },
     body: JSON.stringify(body)
   });
-  if (!r.ok) {
-    const txt = await r.text().catch(() => '');
-    throw new Error(`HTTP ${r.status}: ${txt}`);
-  }
+  if (!r.ok) { const t = await r.text().catch(() => ''); throw new Error(`HTTP ${r.status}: ${t}`); }
   if (r.status === 204) return {};
   return r.json().catch(() => ({}));
 }
 
+async function grocyPut(path, body) {
+  const r = await fetch(`${GROCY_URL}/api${path}`, {
+    method: 'PUT',
+    headers: { 'GROCY-API-KEY': GROCY_KEY, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!r.ok) { const t = await r.text().catch(() => ''); throw new Error(`HTTP ${r.status}: ${t}`); }
+  if (r.status === 204) return {};
+  return r.json().catch(() => ({}));
+}
+
+async function grocyDelete(path) {
+  const r = await fetch(`${GROCY_URL}/api${path}`, {
+    method: 'DELETE',
+    headers: { 'GROCY-API-KEY': GROCY_KEY }
+  });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+}
+
 // ─────────────────────────────────────────────
-//  Load data
+//  Load inventory data
 // ─────────────────────────────────────────────
 async function loadData() {
   pendingChanges.clear();
@@ -604,14 +827,6 @@ async function loadData() {
     catFilter.innerHTML = '<option value="">Alla kategorier</option>' +
       cats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
 
-    // populate location filter
-    const locs = [...new Set(allProducts.map(p => p.location).filter(Boolean))].sort();
-    const locFilterEl = document.getElementById('locationFilter');
-    if (locFilterEl) {
-      locFilterEl.innerHTML = '<option value="">Alla platser</option>' +
-        locs.map(l => `<option value="${esc(l)}">${esc(l)}</option>`).join('');
-    }
-
     applyFilters();
   } catch (err) {
     console.error(err);
@@ -645,17 +860,14 @@ function markChange(id, newVal) {
 function updateCardDirty(id) {
   const card = document.getElementById(`card-${id}`);
   if (!card) return;
-  if (pendingChanges.has(id)) {
-    card.classList.add('dirty');
-  } else {
-    card.classList.remove('dirty');
-  }
+  card.classList.toggle('dirty', pendingChanges.has(id));
 }
 
 function updateSaveBar() {
   const n = pendingChanges.size;
   changeCount.textContent = n;
-  if (n > 0) {
+  const onInventory = document.getElementById('tab-inventory').classList.contains('active');
+  if (n > 0 && onInventory) {
     saveBar.classList.add('visible');
   } else {
     saveBar.classList.remove('visible');
@@ -664,12 +876,12 @@ function updateSaveBar() {
 }
 
 // ─────────────────────────────────────────────
-//  Filter & render
+//  Filter & render – Inventering
 // ─────────────────────────────────────────────
 function applyFilters() {
-  const q   = searchInput.value.toLowerCase();
-  const cat = catFilter.value;
-  const sf  = stockFilter.value;
+  const q       = searchInput.value.toLowerCase();
+  const cat     = catFilter.value;
+  const sf      = stockFilter.value;
   const sortBy  = sortSelect.value;
   const groupBy = groupSelect.value;
 
@@ -683,29 +895,20 @@ function applyFilters() {
     return true;
   });
 
-  // Sort
   filteredList.sort((a, b) => {
-    if (sortBy === 'location') {
-      const locCmp = (a.location || '').localeCompare(b.location || '', 'sv');
-      return locCmp !== 0 ? locCmp : a.name.localeCompare(b.name, 'sv');
-    }
-    if (sortBy === 'category') {
-      const catCmp = (a.category || '').localeCompare(b.category || '', 'sv');
-      return catCmp !== 0 ? catCmp : a.name.localeCompare(b.name, 'sv');
-    }
+    if (sortBy === 'location') return (a.location||'').localeCompare(b.location||'','sv') || a.name.localeCompare(b.name,'sv');
+    if (sortBy === 'category') return (a.category||'').localeCompare(b.category||'','sv') || a.name.localeCompare(b.name,'sv');
     return a.name.localeCompare(b.name, 'sv');
   });
 
-  // When grouping, also sort by group key first
   if (groupBy) {
     filteredList.sort((a, b) => {
-      const keyA = (groupBy === 'location' ? a.location : a.category) || '';
-      const keyB = (groupBy === 'location' ? b.location : b.category) || '';
-      const grpCmp = keyA.localeCompare(keyB, 'sv');
-      if (grpCmp !== 0) return grpCmp;
-      // within group: respect the chosen sort
-      if (sortBy === 'location') return (a.location || '').localeCompare(b.location || '', 'sv') || a.name.localeCompare(b.name, 'sv');
-      if (sortBy === 'category') return (a.category || '').localeCompare(b.category || '', 'sv') || a.name.localeCompare(b.name, 'sv');
+      const kA = (groupBy === 'location' ? a.location : a.category) || '';
+      const kB = (groupBy === 'location' ? b.location : b.category) || '';
+      const g = kA.localeCompare(kB, 'sv');
+      if (g !== 0) return g;
+      if (sortBy === 'location') return (a.location||'').localeCompare(b.location||'','sv') || a.name.localeCompare(b.name,'sv');
+      if (sortBy === 'category') return (a.category||'').localeCompare(b.category||'','sv') || a.name.localeCompare(b.name,'sv');
       return a.name.localeCompare(b.name, 'sv');
     });
   }
@@ -737,29 +940,22 @@ function renderGrid() {
   let html = '';
 
   if (groupBy) {
-    // build groups in order
-    const groupIcon = groupBy === 'location' ? 'fa-location-dot' : 'fa-tag';
+    const groupIcon    = groupBy === 'location' ? 'fa-location-dot' : 'fa-tag';
     const noGroupLabel = groupBy === 'location' ? 'Utan plats' : 'Utan kategori';
-    let lastKey = undefined;
-    let groupCount = 0;
-    let groupStartIdx = 0;
-
-    // pre-pass: count per group
-    const groupCounts = {};
+    const groupCounts  = {};
     filteredList.forEach(p => {
-      const key = (groupBy === 'location' ? p.location : p.category) || '';
-      groupCounts[key] = (groupCounts[key] || 0) + 1;
+      const k = (groupBy === 'location' ? p.location : p.category) || '';
+      groupCounts[k] = (groupCounts[k] || 0) + 1;
     });
-
+    let lastKey;
     filteredList.forEach(p => {
       const key = (groupBy === 'location' ? p.location : p.category) || '';
       if (key !== lastKey) {
-        html += `
-          <div class="group-header">
-            <div class="group-header-icon"><i class="fas ${groupIcon}"></i></div>
-            <span class="group-header-name">${esc(key || noGroupLabel)}</span>
-            <span class="group-header-count">${groupCounts[key]} st</span>
-          </div>`;
+        html += `<div class="group-header">
+          <div class="group-header-icon"><i class="fas ${groupIcon}"></i></div>
+          <span class="group-header-name">${esc(key || noGroupLabel)}</span>
+          <span class="group-header-count">${groupCounts[key]} st</span>
+        </div>`;
         lastKey = key;
       }
       html += productCard(p, groupBy);
@@ -770,7 +966,6 @@ function renderGrid() {
 
   grid.innerHTML = html;
 
-  // restore dirty state
   filteredList.forEach(p => {
     if (pendingChanges.has(p.id)) {
       const card  = document.getElementById(`card-${p.id}`);
@@ -780,13 +975,10 @@ function renderGrid() {
     }
   });
 
-  // events
-  grid.querySelectorAll('.qty-btn-minus').forEach(btn => {
-    btn.addEventListener('click', () => adjustQty(btn.dataset.id, -1));
-  });
-  grid.querySelectorAll('.qty-btn-plus').forEach(btn => {
-    btn.addEventListener('click', () => adjustQty(btn.dataset.id, +1));
-  });
+  grid.querySelectorAll('.qty-btn-minus').forEach(btn =>
+    btn.addEventListener('click', () => adjustQty(btn.dataset.id, -1)));
+  grid.querySelectorAll('.qty-btn-plus').forEach(btn =>
+    btn.addEventListener('click', () => adjustQty(btn.dataset.id, +1)));
   grid.querySelectorAll('.qty-input').forEach(input => {
     input.addEventListener('input', () => {
       const val = parseFloat(input.value);
@@ -805,23 +997,18 @@ function renderGrid() {
 
 function productCard(p, groupBy) {
   const displayStock = pendingChanges.has(p.id) ? pendingChanges.get(p.id) : p.stock;
-  const stockClass   = displayStock === 0 ? 'stock-zero'
-                     : (p.minStock > 0 && displayStock < p.minStock ? 'stock-low' : 'stock-ok');
-  const stockIcon    = displayStock === 0 ? 'fa-circle-xmark'
-                     : (p.minStock > 0 && displayStock < p.minStock ? 'fa-triangle-exclamation' : 'fa-circle-check');
+  const stockClass   = displayStock === 0 ? 'stock-zero' : (p.minStock > 0 && displayStock < p.minStock ? 'stock-low' : 'stock-ok');
+  const stockIcon    = displayStock === 0 ? 'fa-circle-xmark' : (p.minStock > 0 && displayStock < p.minStock ? 'fa-triangle-exclamation' : 'fa-circle-check');
   const unitLabel    = p.unit || 'st';
   const inputVal     = pendingChanges.has(p.id) ? fmt(pendingChanges.get(p.id)) : fmt(p.stock);
-
-  // show location badge unless we're already grouping by location
   const showLocation = p.location && groupBy !== 'location';
-  // show category badge unless we're already grouping by category
   const showCategory = p.category && groupBy !== 'category';
 
   return `
     <div class="product-card" id="card-${p.id}">
       <div class="card-top">
         <div style="display:flex;align-items:center;gap:6px;min-width:0;flex:1">
-          <div class="dirty-dot" id="dot-${p.id}"></div>
+          <div class="dirty-dot"></div>
           <div class="product-name">${esc(p.name)}</div>
         </div>
         <div style="display:flex;gap:4px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
@@ -829,69 +1016,55 @@ function productCard(p, groupBy) {
           ${showCategory ? `<div class="product-category">${esc(p.category)}</div>` : ''}
         </div>
       </div>
-
       <div class="stock-row">
         <div class="stock-badge ${stockClass}" id="badge-${p.id}">
           <i class="fas ${stockIcon}" style="font-size:11px"></i>
-          <span id="badge-text-${p.id}">${fmt(displayStock)} ${esc(unitLabel)}</span>
+          <span>${fmt(displayStock)} ${esc(unitLabel)}</span>
         </div>
         ${p.minStock > 0 ? `<span class="stock-label">min ${fmt(p.minStock)}</span>` : ''}
       </div>
-
       <div class="card-input-row">
         <div class="qty-input-wrap">
-          <button class="qty-btn qty-btn-minus" data-id="${p.id}" title="Minska">−</button>
+          <button class="qty-btn qty-btn-minus" data-id="${p.id}">−</button>
           <input class="qty-input" type="number" step="0.5" min="0"
             id="qty-${p.id}" data-id="${p.id}"
             value="${inputVal}" data-original="${p.stock}" />
-          <button class="qty-btn qty-btn-plus" data-id="${p.id}" title="Öka">+</button>
+          <button class="qty-btn qty-btn-plus" data-id="${p.id}">+</button>
         </div>
         <span class="qty-unit">${esc(unitLabel)}</span>
       </div>
     </div>`;
 }
 
-// ─────────────────────────────────────────────
-//  Qty helpers
-// ─────────────────────────────────────────────
 function adjustQty(id, delta) {
   const input = document.getElementById(`qty-${id}`);
   if (!input) return;
-  const current = parseFloat(input.value) || 0;
-  const next = Math.max(0, Math.round((current + delta) * 100) / 100);
+  const next = Math.max(0, Math.round((parseFloat(input.value) || 0 + delta) * 100) / 100);
   input.value = fmt(next);
   markChange(id, next);
 }
 
 // ─────────────────────────────────────────────
-//  Save all
+//  Save all – Inventering
 // ─────────────────────────────────────────────
 saveAllBtn.addEventListener('click', async () => {
   if (pendingChanges.size === 0) return;
-
   saveAllBtn.disabled = true;
   discardBtn.disabled = true;
   const ids = [...pendingChanges.keys()];
   let done = 0, failed = 0;
-
   saveProgress.textContent = `0 / ${ids.length}`;
 
   await Promise.all(ids.map(async id => {
     const newAmt = pendingChanges.get(id);
     try {
       await grocyPost(`/stock/products/${id}/inventory`, {
-        new_amount: newAmt,
-        best_before_date: null,
-        transaction_type: 'inventory-correction'
+        new_amount: newAmt, best_before_date: null, transaction_type: 'inventory-correction'
       });
-      // update local state
       const prod = allProducts.find(p => p.id === id);
       if (prod) prod.stock = newAmt;
-
       pendingChanges.delete(id);
       done++;
-
-      // flash card green
       const card  = document.getElementById(`card-${id}`);
       const input = document.getElementById(`qty-${id}`);
       if (input) input.dataset.original = newAmt;
@@ -900,11 +1073,8 @@ saveAllBtn.addEventListener('click', async () => {
         card.classList.add('saved-flash');
         setTimeout(() => card.classList.remove('saved-flash'), 1200);
       }
-      // update badge text
-      const prod2   = allProducts.find(p => p.id === id);
       const badgeEl = document.getElementById(`badge-${id}`);
-      if (badgeEl && prod2) updateBadgeEl(badgeEl, newAmt, prod2.minStock, prod2.unit || 'st');
-
+      if (badgeEl && prod) updateBadgeEl(badgeEl, newAmt, prod.minStock, prod.unit || 'st');
     } catch (err) {
       console.error(`Fel för produkt ${id}:`, err);
       failed++;
@@ -916,17 +1086,10 @@ saveAllBtn.addEventListener('click', async () => {
   discardBtn.disabled = false;
   updateSaveBar();
   renderStats();
-
-  if (failed === 0) {
-    toast(`${done} produkt(er) sparade ✓`, 'success');
-  } else {
-    toast(`${done} sparade, ${failed} misslyckades`, 'error');
-  }
+  toast(failed === 0 ? `${done} produkt(er) sparade ✓` : `${done} sparade, ${failed} misslyckades`,
+        failed === 0 ? 'success' : 'error');
 });
 
-// ─────────────────────────────────────────────
-//  Discard all
-// ─────────────────────────────────────────────
 discardBtn.addEventListener('click', () => {
   pendingChanges.forEach((_, id) => {
     const prod  = allProducts.find(p => p.id === id);
@@ -939,17 +1102,347 @@ discardBtn.addEventListener('click', () => {
   updateSaveBar();
 });
 
-// ─────────────────────────────────────────────
-//  Update badge element in-place
-// ─────────────────────────────────────────────
 function updateBadgeEl(badgeEl, stock, minStock, unit) {
-  badgeEl.className = 'stock-badge ' + (stock === 0 ? 'stock-zero'
-    : (minStock > 0 && stock < minStock ? 'stock-low' : 'stock-ok'));
-  const icon = stock === 0 ? 'fa-circle-xmark'
-    : (minStock > 0 && stock < minStock ? 'fa-triangle-exclamation' : 'fa-circle-check');
-  badgeEl.innerHTML = `<i class="fas ${icon}" style="font-size:11px"></i>
-    <span>${fmt(stock)} ${esc(unit)}</span>`;
+  badgeEl.className = 'stock-badge ' + (stock === 0 ? 'stock-zero' : (minStock > 0 && stock < minStock ? 'stock-low' : 'stock-ok'));
+  const icon = stock === 0 ? 'fa-circle-xmark' : (minStock > 0 && stock < minStock ? 'fa-triangle-exclamation' : 'fa-circle-check');
+  badgeEl.innerHTML = `<i class="fas ${icon}" style="font-size:11px"></i><span>${fmt(stock)} ${esc(unit)}</span>`;
 }
+
+// ─────────────────────────────────────────────
+//  Shopping list – Load
+// ─────────────────────────────────────────────
+async function loadShoppingList() {
+  shopListItems.innerHTML = `<div class="shopping-state"><div class="spinner" style="width:28px;height:28px;border-width:2px"></div></div>`;
+  try {
+    // get default list id
+    const lists = await grocyGet('/objects/shopping_lists').catch(() => []);
+    if (lists && lists.length > 0) {
+      shoppingListId = lists[0].id;
+      document.getElementById('shoppingListTitle').textContent = lists[0].name || 'Inköpslista';
+    }
+
+    shoppingItems = await grocyGet('/objects/shopping_list_items');
+    renderShoppingList();
+  } catch (err) {
+    shopListItems.innerHTML = `<div class="shopping-state" style="color:var(--danger)"><i class="fas fa-triangle-exclamation"></i><p>${esc(err.message)}</p></div>`;
+  }
+}
+
+function renderShoppingList() {
+  const items    = shoppingItems.filter(i => String(i.shopping_list_id) === String(shoppingListId));
+  const pending  = items.filter(i => String(i.done) !== '1');
+  const done     = items.filter(i => String(i.done) === '1');
+  const total    = items.length;
+  const doneCount = done.length;
+
+  shopListMeta.textContent = total === 0 ? 'Listan är tom'
+    : `${doneCount} av ${total} avbockade`;
+
+  if (total === 0) {
+    shopListItems.innerHTML = `<div class="shopping-state"><i class="fas fa-check-circle" style="color:var(--success);opacity:.6"></i><p>Listan är tom</p></div>`;
+    return;
+  }
+
+  const renderItem = item => {
+    const prod     = allProducts.find(p => p.id === String(item.product_id));
+    const name     = prod ? prod.name : (item.note || 'Okänd vara');
+    const unit     = prod ? (prod.unit || 'st') : 'st';
+    const isDone   = String(item.done) === '1';
+    const amt      = parseFloat(item.amount) || 1;
+    return `
+      <div class="shop-item ${isDone ? 'done' : ''}" id="sitem-${item.id}">
+        <button class="shop-item-check" data-id="${item.id}" data-done="${isDone ? '1' : '0'}" title="${isDone ? 'Ångra' : 'Bocka av'}">
+          <i class="fas fa-check"></i>
+        </button>
+        <div class="shop-item-name">${esc(name)}</div>
+        <div class="shop-amount-wrap" style="width:auto">
+          <button class="shop-item-amt-btn" data-id="${item.id}" data-delta="-1">−</button>
+          <input class="shop-item-amount" type="number" step="0.5" min="0.5"
+            value="${fmt(amt)}" data-id="${item.id}" style="width:40px" />
+          <button class="shop-item-amt-btn" data-id="${item.id}" data-delta="1">+</button>
+        </div>
+        <span class="shop-item-unit">${esc(unit)}</span>
+        <button class="shop-item-delete" data-id="${item.id}" title="Ta bort">
+          <i class="fas fa-xmark"></i>
+        </button>
+      </div>`;
+  };
+
+  shopListItems.innerHTML =
+    pending.map(renderItem).join('') +
+    (done.length > 0 ? done.map(renderItem).join('') : '');
+
+  // events
+  shopListItems.querySelectorAll('.shop-item-check').forEach(btn => {
+    btn.addEventListener('click', () => toggleShopItemDone(btn.dataset.id, btn.dataset.done === '1'));
+  });
+  shopListItems.querySelectorAll('.shop-item-delete').forEach(btn => {
+    btn.addEventListener('click', () => deleteShopItem(btn.dataset.id));
+  });
+  shopListItems.querySelectorAll('.shop-item-amt-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const input = shopListItems.querySelector(`.shop-item-amount[data-id="${btn.dataset.id}"]`);
+      if (!input) return;
+      const next = Math.max(0.5, Math.round((parseFloat(input.value) + parseFloat(btn.dataset.delta)) * 10) / 10);
+      input.value = fmt(next);
+      updateShopItemAmount(btn.dataset.id, next);
+    });
+  });
+  shopListItems.querySelectorAll('.shop-item-amount').forEach(input => {
+    input.addEventListener('change', () => {
+      const val = parseFloat(input.value);
+      if (!isNaN(val) && val > 0) updateShopItemAmount(input.dataset.id, val);
+    });
+  });
+}
+
+async function toggleShopItemDone(id, currentlyDone) {
+  const item = shoppingItems.find(i => String(i.id) === String(id));
+  if (!item) return;
+  const newDone = currentlyDone ? 0 : 1;
+  try {
+    await grocyPut(`/objects/shopping_list_items/${id}`, { ...item, done: newDone });
+    item.done = String(newDone);
+    renderShoppingList();
+  } catch (err) {
+    toast('Kunde inte uppdatera', 'error');
+  }
+}
+
+async function updateShopItemAmount(id, amount) {
+  const item = shoppingItems.find(i => String(i.id) === String(id));
+  if (!item) return;
+  try {
+    await grocyPut(`/objects/shopping_list_items/${id}`, { ...item, amount });
+    item.amount = String(amount);
+    shopListMeta.textContent = `Uppdaterat ✓`;
+  } catch (err) {
+    toast('Kunde inte uppdatera antal', 'error');
+  }
+}
+
+async function deleteShopItem(id) {
+  try {
+    await grocyDelete(`/objects/shopping_list_items/${id}`);
+    shoppingItems = shoppingItems.filter(i => String(i.id) !== String(id));
+    renderShoppingList();
+  } catch (err) {
+    toast('Kunde inte ta bort', 'error');
+  }
+}
+
+document.getElementById('clearDoneBtn').addEventListener('click', async () => {
+  const doneItems = shoppingItems.filter(i => String(i.done) === '1' && String(i.shopping_list_id) === String(shoppingListId));
+  if (doneItems.length === 0) { toast('Inga avbockade att rensa', 'default'); return; }
+  await Promise.all(doneItems.map(i => grocyDelete(`/objects/shopping_list_items/${i.id}`).catch(() => {})));
+  shoppingItems = shoppingItems.filter(i => String(i.done) !== '1');
+  renderShoppingList();
+  toast(`${doneItems.length} avbockade raderade`, 'success');
+});
+
+// ─────────────────────────────────────────────
+//  Shopping – Autocomplete
+// ─────────────────────────────────────────────
+let focusedSuggIdx = -1;
+
+function getSuggestions(q) {
+  if (!q) return [];
+  const lq = q.toLowerCase();
+  return allProducts
+    .filter(p => p.name.toLowerCase().includes(lq))
+    .sort((a, b) => {
+      const aStarts = a.name.toLowerCase().startsWith(lq);
+      const bStarts = b.name.toLowerCase().startsWith(lq);
+      if (aStarts && !bStarts) return -1;
+      if (!aStarts && bStarts) return  1;
+      return a.name.localeCompare(b.name, 'sv');
+    })
+    .slice(0, 8);
+}
+
+function renderSuggestions(q) {
+  const suggs = getSuggestions(q);
+  focusedSuggIdx = -1;
+
+  if (!q) { shopSugg.classList.add('hidden'); return; }
+
+  let html = suggs.map((p, i) => {
+    const stockClass = p.stock === 0 ? 'stock-zero' : (p.minStock > 0 && p.stock < p.minStock ? 'stock-low' : 'stock-ok');
+    return `<div class="suggestion-item" data-idx="${i}" data-id="${p.id}">
+      <span class="suggestion-name">${highlightMatch(p.name, q)}</span>
+      <span class="suggestion-meta">
+        ${p.category ? `<span style="color:var(--text-light)">${esc(p.category)}</span> · ` : ''}
+        <span class="stock-badge ${stockClass}" style="padding:1px 7px;font-size:11px">${fmt(p.stock)} ${esc(p.unit||'st')}</span>
+      </span>
+    </div>`;
+  }).join('');
+
+  // free-text option
+  html += `<div class="free-text-item" id="freeTextSugg">
+    <i class="fas fa-pencil" style="font-size:12px"></i>
+    Lägg till "<strong>${esc(q)}</strong>" som fritext
+  </div>`;
+
+  shopSugg.innerHTML = html;
+  shopSugg.classList.remove('hidden');
+
+  shopSugg.querySelectorAll('.suggestion-item').forEach(el => {
+    el.addEventListener('mousedown', e => {
+      e.preventDefault();
+      selectSuggestion(parseInt(el.dataset.idx));
+    });
+  });
+  document.getElementById('freeTextSugg').addEventListener('mousedown', e => {
+    e.preventDefault();
+    selectFreeText(shopInput.value.trim());
+  });
+}
+
+function highlightMatch(name, q) {
+  const idx = name.toLowerCase().indexOf(q.toLowerCase());
+  if (idx < 0) return esc(name);
+  return esc(name.slice(0, idx)) +
+    `<strong>${esc(name.slice(idx, idx + q.length))}</strong>` +
+    esc(name.slice(idx + q.length));
+}
+
+function selectSuggestion(idx) {
+  const suggs = getSuggestions(shopInput.value);
+  const p = suggs[idx];
+  if (!p) return;
+  selectedProduct = p;
+  shopInput.value = p.name;
+  shopSugg.classList.add('hidden');
+  shopAddBtn.disabled = false;
+  shopAmount.focus();
+}
+
+function selectFreeText(text) {
+  if (!text) return;
+  selectedProduct = null;
+  shopInput.value = text;
+  shopSugg.classList.add('hidden');
+  shopAddBtn.disabled = false;
+  shopAmount.focus();
+}
+
+shopInput.addEventListener('input', () => {
+  shopQuery = shopInput.value.trim();
+  selectedProduct = null;
+  shopAddBtn.disabled = !shopQuery;
+  renderSuggestions(shopQuery);
+});
+
+shopInput.addEventListener('keydown', e => {
+  const items = [...shopSugg.querySelectorAll('.suggestion-item, .free-text-item')];
+  if (!items.length) return;
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    focusedSuggIdx = Math.min(focusedSuggIdx + 1, items.length - 1);
+    items.forEach((el, i) => el.classList.toggle('focused', i === focusedSuggIdx));
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    focusedSuggIdx = Math.max(focusedSuggIdx - 1, 0);
+    items.forEach((el, i) => el.classList.toggle('focused', i === focusedSuggIdx));
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    if (focusedSuggIdx >= 0 && items[focusedSuggIdx]) {
+      items[focusedSuggIdx].dispatchEvent(new MouseEvent('mousedown'));
+    } else if (shopQuery) {
+      const suggs = getSuggestions(shopQuery);
+      if (suggs.length > 0) selectSuggestion(0);
+      else selectFreeText(shopQuery);
+    }
+  } else if (e.key === 'Escape') {
+    shopSugg.classList.add('hidden');
+  }
+});
+
+shopInput.addEventListener('blur', () => {
+  setTimeout(() => shopSugg.classList.add('hidden'), 150);
+});
+
+// amount buttons
+document.getElementById('shopAmtMinus').addEventListener('click', () => {
+  shopAmount.value = fmt(Math.max(0.5, Math.round((parseFloat(shopAmount.value) - 0.5) * 10) / 10));
+});
+document.getElementById('shopAmtPlus').addEventListener('click', () => {
+  shopAmount.value = fmt(Math.round((parseFloat(shopAmount.value) + 0.5) * 10) / 10);
+});
+
+// ─────────────────────────────────────────────
+//  Shopping – Add item
+// ─────────────────────────────────────────────
+shopAddBtn.addEventListener('click', addToShoppingList);
+shopInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.defaultPrevented && shopQuery && shopSugg.classList.contains('hidden')) {
+    addToShoppingList();
+  }
+});
+
+async function addToShoppingList() {
+  const amount = parseFloat(shopAmount.value) || 1;
+  if (!shopQuery && !selectedProduct) return;
+
+  shopAddBtn.disabled = true;
+  try {
+    if (selectedProduct) {
+      // known product — use the dedicated endpoint (handles duplicates gracefully)
+      await grocyPost('/stock/shoppinglist/add-product', {
+        product_id: parseInt(selectedProduct.id),
+        list_id: shoppingListId,
+        product_amount: amount
+      });
+    } else {
+      // free text
+      await grocyPost('/objects/shopping_list_items', {
+        shopping_list_id: shoppingListId,
+        amount,
+        note: shopQuery
+      });
+    }
+
+    const name = selectedProduct ? selectedProduct.name : shopQuery;
+    toast(`"${name}" lades till`, 'success');
+    shopInput.value = '';
+    shopAmount.value = '1';
+    selectedProduct = null;
+    shopQuery = '';
+    shopSugg.classList.add('hidden');
+
+    // reload list
+    shoppingItems = await grocyGet('/objects/shopping_list_items');
+    renderShoppingList();
+  } catch (err) {
+    toast(`Kunde inte lägga till: ${err.message}`, 'error');
+  } finally {
+    shopAddBtn.disabled = true; // keep disabled until new input
+    shopInput.focus();
+  }
+}
+
+// ─────────────────────────────────────────────
+//  Refresh button
+// ─────────────────────────────────────────────
+document.getElementById('refreshBtn').addEventListener('click', () => {
+  const onShopping = document.getElementById('tab-shopping').classList.contains('active');
+  if (onShopping) {
+    loadShoppingList();
+  } else {
+    if (pendingChanges.size > 0 &&
+        !confirm('Du har osparade ändringar. Vill du ändå ladda om och förlora dem?')) return;
+    loadData();
+  }
+});
+
+// ─────────────────────────────────────────────
+//  Inventory filter listeners
+// ─────────────────────────────────────────────
+searchInput.addEventListener('input', applyFilters);
+catFilter.addEventListener('change', applyFilters);
+stockFilter.addEventListener('change', applyFilters);
+sortSelect.addEventListener('change', applyFilters);
+groupSelect.addEventListener('change', applyFilters);
 
 // ─────────────────────────────────────────────
 //  Utilities
@@ -959,33 +1452,14 @@ function fmt(n) {
   return Number.isInteger(n) ? String(n) : parseFloat(n.toFixed(2)).toString();
 }
 function esc(s) {
-  return String(s || '')
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
-
-// ─────────────────────────────────────────────
-//  Event listeners
-// ─────────────────────────────────────────────
-searchInput.addEventListener('input', applyFilters);
-catFilter.addEventListener('change', applyFilters);
-stockFilter.addEventListener('change', applyFilters);
-sortSelect.addEventListener('change', applyFilters);
-groupSelect.addEventListener('change', applyFilters);
-document.getElementById('refreshBtn').addEventListener('click', () => {
-  if (pendingChanges.size > 0 &&
-      !confirm('Du har osparade ändringar. Vill du ändå ladda om och förlora dem?')) return;
-  loadData();
-});
 
 // ─────────────────────────────────────────────
 //  Init
 // ─────────────────────────────────────────────
-// Om config kommer från miljövariabler, dölj inställningsknappen
 const configFromEnv = !!(window.GROCY_CONFIG?.url && window.GROCY_CONFIG.url !== '${GROCY_URL}');
-if (configFromEnv) {
-  document.getElementById('settingsBtn').style.display = 'none';
-}
+if (configFromEnv) document.getElementById('settingsBtn').style.display = 'none';
 
 if (!GROCY_URL || !GROCY_KEY) {
   openSettings();
