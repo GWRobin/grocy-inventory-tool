@@ -7,8 +7,7 @@ on:
   workflow_dispatch:
 
 env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build-and-push:
@@ -24,14 +23,13 @@ jobs:
       - name: Log in to GitHub Container Registry
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-      - name: Build image
+      - name: Build and push image
         run: |
-          IMAGE=ghcr.io/${{ github.repository }}
-          docker build -t "${IMAGE}:latest" .
-          docker tag "${IMAGE}:latest" "${IMAGE}:sha-$(echo ${{ github.sha }} | cut -c1-7)"
+          # ghcr.io kräver lowercase – konvertera repository-namnet
+          IMAGE=ghcr.io/$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          SHA=sha-$(echo "${{ github.sha }}" | cut -c1-7)
 
-      - name: Push image
-        run: |
-          IMAGE=ghcr.io/${{ github.repository }}
+          docker build -t "${IMAGE}:latest" -t "${IMAGE}:${SHA}" .
+
           docker push "${IMAGE}:latest"
-          docker push "${IMAGE}:sha-$(echo ${{ github.sha }} | cut -c1-7)"
+          docker push "${IMAGE}:${SHA}"
