@@ -411,7 +411,7 @@
 
     /* List items */
     .shop-item {
-      display: flex; align-items: center; gap: 12px;
+      display: flex; align-items: flex-start; gap: 10px 12px;
       padding: 12px 18px;
       border-bottom: 1px solid var(--border);
       transition: background .1s;
@@ -426,6 +426,7 @@
       border: 2px solid var(--border); cursor: pointer;
       display: flex; align-items: center; justify-content: center;
       flex-shrink: 0; transition: all .15s; background: transparent;
+      margin-top: 2px; /* align with text baseline */
     }
     .shop-item-check:hover { border-color: var(--success); }
     .shop-item.done .shop-item-check {
@@ -436,14 +437,24 @@
 
     .shop-item-name {
       flex: 1; font-size: 14px; font-weight: 500; min-width: 0;
+      padding-top: 2px;
     }
     .shop-item.done .shop-item-name { text-decoration: line-through; color: var(--text-muted); }
     .shop-item-note { font-size: 12px; color: var(--text-muted); }
 
+    /* Controls row: amount + unit + action buttons — sits below the name */
+    .shop-item-actions {
+      flex: 0 0 100%;
+      display: flex; align-items: center; gap: 8px;
+      padding-left: 34px; /* indent past checkbox (22px) + gap (12px) */
+      margin-top: -2px;
+    }
+    .shop-item-actions .shop-item-unit { margin-right: auto; } /* push buttons to the right */
+
     .shop-item-amount-wrap {
       display: flex; align-items: center;
       border: 1px solid var(--border); border-radius: var(--radius-sm);
-      overflow: hidden; background: var(--surface);
+      overflow: hidden; background: var(--surface); flex-shrink: 0;
     }
     .shop-item-amount-wrap input {
       width: 44px; border: none; background: transparent;
@@ -463,7 +474,7 @@
     .shop-item-amt-btn:hover { background: var(--border); }
     .shop-item-unit {
       font-size: 12px; color: var(--text-muted); flex-shrink: 0;
-      width: 44px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      min-width: 24px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     /* unit shown inside the amount wrap */
     .shop-add-unit {
@@ -488,13 +499,12 @@
     }
     .create-product-btn:hover { opacity: 1; background: #ebf0ff; }
 
-    /* ── Added-by attribution — full-width row below all other item content ── */
+    /* ── Added-by attribution — full-width row below controls ── */
     .shop-item-added-by {
       flex: 0 0 100%;
       font-size: 11px; color: var(--text-light);
-      padding: 0 0 2px 34px; /* indent past the checkbox */
+      padding: 2px 0 2px 34px; /* indent matches .shop-item-actions */
       font-weight: 400; opacity: 0.8;
-      margin-top: -4px;
     }
 
     /* ── Settings overlay ── */
@@ -949,13 +959,14 @@ async function loadData() {
     const stockMap = Object.fromEntries((stockItems || []).map(s => [String(s.product_id), parseFloat(s.amount) || 0]));
 
     allProducts = products.map(p => ({
-      id:       String(p.id),
-      name:     p.name,
-      category: catMap[p.product_group_id] || '',
-      location: locMap[p.location_id] || '',
-      unit:     unitMap[p.qu_id_stock] || '',
-      minStock: parseFloat(p.min_stock_amount) || 0,
-      stock:    stockMap[String(p.id)] ?? 0
+      id:           String(p.id),
+      name:         p.name,
+      category:     catMap[p.product_group_id] || '',
+      location:     locMap[p.location_id] || '',
+      unit:         unitMap[p.qu_id_stock] || '',         // lagerenhet (inventering)
+      purchaseUnit: unitMap[p.qu_id_purchase] || unitMap[p.qu_id_stock] || '', // inköpsenhet (shoppinglista)
+      minStock:     parseFloat(p.min_stock_amount) || 0,
+      stock:        stockMap[String(p.id)] ?? 0
     })).sort((a, b) => a.name.localeCompare(b.name, 'sv'));
 
     const cats = [...new Set(allProducts.map(p => p.category).filter(Boolean))].sort();
@@ -1414,7 +1425,7 @@ function renderShoppingList() {
   const renderItem = item => {
     const prod     = allProducts.find(p => p.id === String(item.product_id));
     const name     = prod ? prod.name : (item.note || 'Okänd vara');
-    const unit     = prod ? (prod.unit || 'st') : 'st';
+    const unit     = prod ? (prod.purchaseUnit || prod.unit || 'st') : 'st';
     const isDone   = String(item.done) === '1';
     const amt      = parseFloat(item.amount) || 1;
 
@@ -1430,17 +1441,19 @@ function renderShoppingList() {
           <i class="fas fa-check"></i>
         </button>
         <div class="shop-item-name">${esc(name)}</div>
-        <div class="shop-amount-wrap" style="width:auto">
-          <button class="shop-item-amt-btn" data-id="${item.id}" data-delta="-1">−</button>
-          <input class="shop-item-amount" type="number" step="0.5" min="0.5"
-            value="${fmt(amt)}" data-id="${item.id}" style="width:40px" />
-          <button class="shop-item-amt-btn" data-id="${item.id}" data-delta="1">+</button>
+        <div class="shop-item-actions">
+          <div class="shop-item-amount-wrap">
+            <button class="shop-item-amt-btn" data-id="${item.id}" data-delta="-1">−</button>
+            <input class="shop-item-amount" type="number" step="0.5" min="0.5"
+              value="${fmt(amt)}" data-id="${item.id}" />
+            <button class="shop-item-amt-btn" data-id="${item.id}" data-delta="1">+</button>
+          </div>
+          <span class="shop-item-unit">${esc(unit)}</span>
+          ${!item.product_id ? `<button class="create-product-btn" data-id="${item.id}" data-name="${esc(item.note || name)}" title="Skapa produkt i Grocy"><i class="fas fa-circle-plus"></i></button>` : ''}
+          <button class="shop-item-delete" data-id="${item.id}" title="Ta bort">
+            <i class="fas fa-xmark"></i>
+          </button>
         </div>
-        <span class="shop-item-unit">${esc(unit)}</span>
-        ${!item.product_id ? `<button class="create-product-btn" data-id="${item.id}" data-name="${esc(item.note || name)}" title="Skapa produkt i Grocy"><i class="fas fa-circle-plus"></i></button>` : ''}
-        <button class="shop-item-delete" data-id="${item.id}" title="Ta bort">
-          <i class="fas fa-xmark"></i>
-        </button>
         ${addedByHtml}
       </div>`;
   };
@@ -1692,7 +1705,7 @@ function selectSuggestion(idx) {
   if (!p) return;
   selectedProduct = p;
   shopInput.value = p.name;
-  shopUnitEl.textContent = p.unit || 'st';
+  shopUnitEl.textContent = p.purchaseUnit || p.unit || 'st';
   shopSugg.classList.add('hidden');
   shopAddBtn.disabled = false;
   shopAmount.focus();
