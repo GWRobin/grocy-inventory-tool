@@ -396,6 +396,7 @@
       padding: 12px 18px;
       border-bottom: 1px solid var(--border);
       transition: background .1s;
+      flex-wrap: wrap;
     }
     .shop-item:last-child { border-bottom: none; }
     .shop-item:hover { background: var(--surface2); }
@@ -468,10 +469,13 @@
     }
     .create-product-btn:hover { opacity: 1; background: #ebf0ff; }
 
-    /* ── Added-by attribution ── */
+    /* ── Added-by attribution — full-width row below all other item content ── */
     .shop-item-added-by {
+      flex: 0 0 100%;
       font-size: 11px; color: var(--text-light);
-      margin-top: 3px; font-weight: 400; opacity: 0.8;
+      padding: 0 0 2px 34px; /* indent past the checkbox */
+      font-weight: 400; opacity: 0.8;
+      margin-top: -4px;
     }
 
     /* ── Settings overlay ── */
@@ -1343,7 +1347,7 @@ function renderShoppingList() {
         <button class="shop-item-check" data-id="${item.id}" data-done="${isDone ? '1' : '0'}" title="${isDone ? 'Ångra' : 'Bocka av'}">
           <i class="fas fa-check"></i>
         </button>
-        <div class="shop-item-name">${esc(name)}${addedByHtml}</div>
+        <div class="shop-item-name">${esc(name)}</div>
         <div class="shop-amount-wrap" style="width:auto">
           <button class="shop-item-amt-btn" data-id="${item.id}" data-delta="-1">−</button>
           <input class="shop-item-amount" type="number" step="0.5" min="0.5"
@@ -1355,6 +1359,7 @@ function renderShoppingList() {
         <button class="shop-item-delete" data-id="${item.id}" title="Ta bort">
           <i class="fas fa-xmark"></i>
         </button>
+        ${addedByHtml}
       </div>`;
   };
 
@@ -1389,12 +1394,24 @@ function renderShoppingList() {
   });
 }
 
+// Build a clean PUT body with only the writable fields Grocy accepts
+function shopItemPayload(item, overrides = {}) {
+  return {
+    shopping_list_id: item.shopping_list_id,
+    product_id:       item.product_id ?? null,
+    amount:           item.amount,
+    note:             item.note ?? '',
+    done:             item.done,
+    ...overrides
+  };
+}
+
 async function toggleShopItemDone(id, currentlyDone) {
   const item = shoppingItems.find(i => String(i.id) === String(id));
   if (!item) return;
   const newDone = currentlyDone ? 0 : 1;
   try {
-    await grocyPut(`/objects/shopping_list/${id}`, { ...item, done: newDone });
+    await grocyPut(`/objects/shopping_list/${id}`, shopItemPayload(item, { done: newDone }));
     item.done = String(newDone);
     renderShoppingList();
   } catch (err) {
@@ -1406,7 +1423,7 @@ async function updateShopItemAmount(id, amount) {
   const item = shoppingItems.find(i => String(i.id) === String(id));
   if (!item) return;
   try {
-    await grocyPut(`/objects/shopping_list/${id}`, { ...item, amount });
+    await grocyPut(`/objects/shopping_list/${id}`, shopItemPayload(item, { amount }));
     item.amount = String(amount);
     shopListMeta.textContent = `Uppdaterat ✓`;
   } catch (err) {
@@ -1497,7 +1514,7 @@ document.getElementById('receiveStockBtn').addEventListener('click', async () =>
         transaction_type: 'purchase'
       });
       // mark as done on the list
-      await grocyPut(`/objects/shopping_list/${item.id}`, { ...item, done: 1 });
+      await grocyPut(`/objects/shopping_list/${item.id}`, shopItemPayload(item, { done: 1 }));
       item.done = '1';
       added++;
     } catch {
@@ -1765,46 +1782,48 @@ document.getElementById('cpSaveBtn').addEventListener('click', async () => {
   btn.disabled = true;
 
   try {
-    // 1. Create the product in Grocy
-    const result = await grocyPost('/objects/products', {
-      name,
-      location_id: null,
-      qu_id_stock: unitId,
-      qu_id_purchase: unitId,
-      min_stock_amount: 0
-    });
+    // 1. Kontrollera om en produkt med samma namn redan finns
+    let newProductId = null;
+    const existing = allProducts.find(p => p.name.toLowerCase() === name.toLowerCase());
+    if (existing) {
+      newProductId = existing.id;
+    } else {
+      // Skapa produkten i Grocy
+      const result = await grocyPost('/objects/products', {
+        name,
+        location_id: null,
+        qu_id_stock: unitId,
+        qu_id_purchase: unitId,
+        min_stock_amount: 0
+      });
+      newProductId = result.created_object_id ?? result.id;
+      if (!newProductId) throw new Error('Grocy returnerade inget produkt-id');
 
-    const newProductId = result.created_object_id ?? result.id;
-    if (!newProductId) throw new Error('Grocy returnerade inget produkt-id');
+      // Lägg till i minnet så den syns direkt
+      const unit = allUnits.find(u => u.id == unitId);
+      allProducts.push({
+        id: String(newProductId), name,
+        category: '', location: '',
+        unit: unit ? unit.name : '',
+        minStock: 0, stock: 0
+      });
+      allProducts.sort((a, b) => a.name.localeCompare(b.name, 'sv'));
+    }
 
-    // 2. Update the shopping list item — link to the new product, clear note
+    // 2. Update the shopping list item — link to the product, clear note
     const item = shoppingItems.find(i => String(i.id) === String(cpShopItemId));
     if (item) {
-      await grocyPut(`/objects/shopping_list/${item.id}`, {
-        ...item,
+      await grocyPut(`/objects/shopping_list/${item.id}`, shopItemPayload(item, {
         product_id: newProductId,
         note: ''
-      });
+      }));
       item.product_id = String(newProductId);
       item.note = '';
     }
 
-    // 3. Add to in-memory product list so it shows up immediately
-    const unit = allUnits.find(u => u.id == unitId);
-    allProducts.push({
-      id:       String(newProductId),
-      name,
-      category: '',
-      location: '',
-      unit:     unit ? unit.name : '',
-      minStock: 0,
-      stock:    0
-    });
-    allProducts.sort((a, b) => a.name.localeCompare(b.name, 'sv'));
-
     document.getElementById('createProductOverlay').classList.add('hidden');
     renderShoppingList();
-    toast(`"${name}" skapades och kopplades till raden ✓`, 'success');
+    toast(existing ? `"${name}" finns redan — kopplades till raden ✓` : `"${name}" skapades och kopplades till raden ✓`, 'success');
   } catch (err) {
     toast(`Kunde inte skapa produkt: ${err.message}`, 'error');
   } finally {
