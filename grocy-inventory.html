@@ -206,6 +206,25 @@
     }
     .dirty-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warning); flex-shrink: 0; display: none; }
     .product-card.dirty .dirty-dot { display: block; }
+
+    /* ── Confirm button ── */
+    .confirm-btn {
+      width: 34px; height: 34px; border-radius: 50%;
+      border: 1.5px solid var(--border); background: transparent;
+      color: var(--text-light); cursor: pointer; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; transition: all .15s;
+    }
+    .confirm-btn:hover { border-color: var(--success); color: var(--success); }
+    .product-card.confirmed .confirm-btn {
+      background: var(--success); border-color: var(--success); color: #fff;
+    }
+    .product-card.confirmed {
+      opacity: 0.5;
+      border-color: var(--success-border);
+    }
+    .product-card.confirmed:hover { opacity: 0.75; }
+
     .product-location {
       font-size: 11px; color: var(--primary);
       background: #ebf0ff; border: 1px solid #c3d0fc;
@@ -603,6 +622,7 @@
       <option value="zero">Slut (0)</option>
       <option value="low">Lågt lager</option>
       <option value="ok">I lager</option>
+      <option value="notconfirmed">Ej bekräftade</option>
     </select>
     <select class="filter-select" id="sortSelect">
       <option value="name">Sortera: Namn</option>
@@ -769,6 +789,7 @@ let allProducts  = [];
 let allUnits     = [];
 let filteredList = [];
 const pendingChanges = new Map();
+const confirmedItems = new Set(); // session-only: products confirmed as inventoried
 
 // ─────────────────────────────────────────────
 //  State – Shopping
@@ -907,6 +928,7 @@ async function grocyDelete(path) {
 // ─────────────────────────────────────────────
 async function loadData() {
   pendingChanges.clear();
+  confirmedItems.clear();
   updateSaveBar();
   grid.innerHTML = `<div class="state-container"><div class="spinner"></div><p>Hämtar lager från Grocy…</p></div>`;
   statsBar.innerHTML = '';
@@ -1002,9 +1024,10 @@ function applyFilters() {
     const effectiveStock = pendingChanges.has(p.id) ? pendingChanges.get(p.id) : p.stock;
     if (q   && !p.name.toLowerCase().includes(q)) return false;
     if (cat && p.category !== cat)                 return false;
-    if (sf === 'zero' && effectiveStock !== 0)     return false;
-    if (sf === 'low'  && (effectiveStock === 0 || effectiveStock >= p.minStock)) return false;
-    if (sf === 'ok'   && effectiveStock < p.minStock) return false;
+    if (sf === 'zero'         && effectiveStock !== 0)     return false;
+    if (sf === 'low'          && (effectiveStock === 0 || effectiveStock >= p.minStock)) return false;
+    if (sf === 'ok'           && effectiveStock < p.minStock) return false;
+    if (sf === 'notconfirmed' && confirmedItems.has(p.id))  return false;
     return true;
   });
 
@@ -1031,16 +1054,27 @@ function applyFilters() {
 }
 
 function renderStats() {
-  const total   = allProducts.length;
-  const zero    = allProducts.filter(p => p.stock === 0).length;
-  const low     = allProducts.filter(p => p.stock > 0 && p.minStock > 0 && p.stock < p.minStock).length;
-  const showing = filteredList.length;
+  const total     = allProducts.length;
+  const zero      = allProducts.filter(p => p.stock === 0).length;
+  const low       = allProducts.filter(p => p.stock > 0 && p.minStock > 0 && p.stock < p.minStock).length;
+  const showing   = filteredList.length;
+  const confirmed = confirmedItems.size;
   statsBar.innerHTML = `
     <div class="stat-chip">Totalt <b>${total}</b> produkter</div>
     ${zero ? `<div class="stat-chip" style="border-color:#feb2b2;color:#c53030">Slut: <b>${zero}</b></div>` : ''}
     ${low  ? `<div class="stat-chip" style="border-color:#fbd38d;color:#c05621">Lågt: <b>${low}</b></div>` : ''}
     <div class="stat-chip">Visar <b>${showing}</b></div>
+    ${confirmed > 0 ? `<div class="stat-chip" style="border-color:var(--success-border);color:var(--success)">Bekräftade: <b>${confirmed}</b> / ${total}</div>` : ''}
   `;
+}
+
+// Sort helper: confirmed items go last, otherwise preserve current order
+function sortConfirmedLast(list) {
+  return [...list].sort((a, b) => {
+    const ac = confirmedItems.has(a.id) ? 1 : 0;
+    const bc = confirmedItems.has(b.id) ? 1 : 0;
+    return ac - bc;
+  });
 }
 
 function renderGrid() {
@@ -1061,7 +1095,7 @@ function renderGrid() {
       groupCounts[k] = (groupCounts[k] || 0) + 1;
     });
     let lastKey;
-    filteredList.forEach(p => {
+    sortConfirmedLast(filteredList).forEach(p => {
       const key = (groupBy === 'location' ? p.location : p.category) || '';
       if (key !== lastKey) {
         html += `<div class="group-header">
@@ -1074,7 +1108,7 @@ function renderGrid() {
       html += productCard(p, groupBy);
     });
   } else {
-    html = filteredList.map(p => productCard(p, '')).join('');
+    html = sortConfirmedLast(filteredList).map(p => productCard(p, '')).join('');
   }
 
   grid.innerHTML = html;
@@ -1106,6 +1140,9 @@ function renderGrid() {
       }
     });
   });
+  grid.querySelectorAll('.confirm-btn').forEach(btn => {
+    btn.addEventListener('click', () => toggleConfirm(btn.dataset.id));
+  });
 }
 
 function productCard(p, groupBy) {
@@ -1117,8 +1154,10 @@ function productCard(p, groupBy) {
   const showLocation = p.location && groupBy !== 'location';
   const showCategory = p.category && groupBy !== 'category';
 
+  const isConfirmed = confirmedItems.has(p.id);
+
   return `
-    <div class="product-card" id="card-${p.id}">
+    <div class="product-card${isConfirmed ? ' confirmed' : ''}" id="card-${p.id}">
       <div class="card-top">
         <div style="display:flex;align-items:center;gap:6px;min-width:0;flex:1">
           <div class="dirty-dot"></div>
@@ -1145,8 +1184,50 @@ function productCard(p, groupBy) {
           <button class="qty-btn qty-btn-plus" data-id="${p.id}">+</button>
           <span class="qty-unit">${esc(unitLabel)}</span>
         </div>
+        <button class="confirm-btn" data-id="${p.id}" title="${isConfirmed ? 'Ångra bekräftelse' : 'Bekräfta inventerad'}">
+          <i class="fas fa-check"></i>
+        </button>
       </div>
     </div>`;
+}
+
+function toggleConfirm(id) {
+  if (confirmedItems.has(id)) {
+    confirmedItems.delete(id);
+  } else {
+    confirmedItems.add(id);
+  }
+  renderStats();
+  // re-render the single card in place (avoid full grid re-render)
+  const card = document.getElementById(`card-${id}`);
+  const p = allProducts.find(p => p.id === id);
+  if (card && p) {
+    const groupBy = groupSelect.value;
+    const tmp = document.createElement('div');
+    tmp.innerHTML = productCard(p, groupBy);
+    const newCard = tmp.firstElementChild;
+    // restore dirty state if needed
+    if (pendingChanges.has(id)) newCard.classList.add('dirty');
+    card.replaceWith(newCard);
+    // re-attach events on the new card
+    newCard.querySelector('.qty-btn-minus')?.addEventListener('click', () => adjustQty(id, -1));
+    newCard.querySelector('.qty-btn-plus')?.addEventListener('click', () => adjustQty(id, +1));
+    newCard.querySelector('.qty-input')?.addEventListener('input', e => {
+      const val = parseFloat(e.target.value);
+      if (!isNaN(val) && val >= 0) markChange(id, val);
+    });
+    newCard.querySelector('.confirm-btn')?.addEventListener('click', () => toggleConfirm(id));
+    // move card to correct position (confirmed → end, unconfirmed → before first confirmed)
+    const allCards = [...grid.querySelectorAll('.product-card')];
+    const firstConfirmed = allCards.find(c => c.classList.contains('confirmed') && c !== newCard);
+    if (confirmedItems.has(id) && firstConfirmed) {
+      firstConfirmed.parentNode.insertBefore(newCard, firstConfirmed.nextSibling ?? null);
+      // actually append after last confirmed sibling — simplest: move to end of parent
+      newCard.parentNode.appendChild(newCard);
+    } else if (!confirmedItems.has(id) && firstConfirmed) {
+      firstConfirmed.parentNode.insertBefore(newCard, firstConfirmed);
+    }
+  }
 }
 
 function adjustQty(id, delta) {
@@ -1177,6 +1258,7 @@ saveAllBtn.addEventListener('click', async () => {
       const prod = allProducts.find(p => p.id === id);
       if (prod) prod.stock = newAmt;
       pendingChanges.delete(id);
+      confirmedItems.add(id); // saving counts as confirming
       done++;
       const card  = document.getElementById(`card-${id}`);
       const input = document.getElementById(`qty-${id}`);
@@ -1184,7 +1266,7 @@ saveAllBtn.addEventListener('click', async () => {
       if (card) {
         card.classList.remove('dirty');
         card.classList.add('saved-flash');
-        setTimeout(() => card.classList.remove('saved-flash'), 1200);
+        setTimeout(() => { card.classList.remove('saved-flash'); card.classList.add('confirmed'); }, 1200);
       }
       const badgeEl = document.getElementById(`badge-${id}`);
       if (badgeEl && prod) updateBadgeEl(badgeEl, newAmt, prod.minStock, prod.unit || 'st');
