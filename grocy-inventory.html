@@ -696,8 +696,8 @@
           <div class="shopping-list-meta" id="shoppingListMeta">Laddar…</div>
         </div>
         <div class="list-header-actions">
-          <button class="receive-stock-btn" id="receiveStockBtn" title="Lägg till alla varor på listan i lager">
-            <i class="fas fa-box-open"></i> Kvittera in alla
+          <button class="receive-stock-btn" id="receiveStockBtn" title="Lägg till avbockade varor i lager">
+            <i class="fas fa-box-open"></i> Kvittera in avbockade
           </button>
           <button class="add-low-stock-btn" id="addLowStockBtn" title="Lägg till alla varor under minlager på listan">
             <i class="fas fa-arrow-trend-down"></i> Lägg till bristvaror
@@ -1588,31 +1588,31 @@ document.getElementById('addLowStockBtn').addEventListener('click', async () => 
 });
 
 document.getElementById('receiveStockBtn').addEventListener('click', async () => {
-  const pendingItems = shoppingItems.filter(i =>
+  // Operate on checked (done=1) items — user checks off items while shopping,
+  // then clicks this button to add them all to stock at once.
+  const doneItems = shoppingItems.filter(i =>
     String(i.shopping_list_id) === String(shoppingListId) &&
-    String(i.done) !== '1'
+    String(i.done) === '1'
   );
-  if (pendingItems.length === 0) { toast('Inga varor att kvittera in', 'default'); return; }
+  if (doneItems.length === 0) { toast('Inga avbockade varor att kvittera in', 'default'); return; }
 
   const btn = document.getElementById('receiveStockBtn');
   btn.disabled = true;
 
-  const withProduct  = pendingItems.filter(i => i.product_id);
-  const freeTextSkip = pendingItems.length - withProduct.length;
+  const withProduct  = doneItems.filter(i => i.product_id);
+  const freeTextSkip = doneItems.length - withProduct.length;
   let added = 0, failed = 0;
 
   await Promise.all(withProduct.map(async item => {
     try {
       await grocyPost(`/stock/products/${item.product_id}/add`, {
         amount: parseFloat(item.amount) || 1,
-        best_before_date: '2999-12-31',
+        best_before_date: null,
         transaction_type: 'purchase'
       });
-      // mark as done on the list
-      await grocyPut(`/objects/shopping_list/${item.id}`, shopItemPayload(item, { done: 1 }));
-      item.done = '1';
       added++;
-    } catch {
+    } catch (err) {
+      console.error(`Kvittera in misslyckades för produkt ${item.product_id}:`, err.message);
       failed++;
     }
   }));
