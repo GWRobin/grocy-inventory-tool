@@ -533,6 +533,22 @@
     .form-group .hint { font-size: 12px; color: var(--text-muted); margin-top: 5px; }
     .settings-actions { display: flex; gap: 10px; margin-top: 24px; justify-content: flex-end; }
 
+    /* ── Create product: extra fields toggle ── */
+    .cp-more-btn {
+      display: flex; align-items: center; gap: 6px;
+      background: none; border: none; padding: 2px 0 14px;
+      font-size: 13px; color: var(--primary); cursor: pointer;
+      font-weight: 600;
+    }
+    .cp-more-btn:hover { color: var(--primary-dark); }
+    .cp-more-btn i { font-size: 11px; transition: transform .2s; }
+    .cp-more-btn.open i { transform: rotate(90deg); }
+    .cp-extra-fields { display: none; }
+    .cp-extra-fields.open { display: block; }
+    .cp-min-stock-row { display: flex; gap: 8px; align-items: center; }
+    .cp-min-stock-row input { flex: 1; }
+    .cp-min-stock-unit { font-size: 13px; color: var(--text-muted); white-space: nowrap; min-width: 40px; }
+
     /* ── Empty / loading ── */
     .state-container {
       grid-column: 1/-1; text-align: center;
@@ -767,6 +783,30 @@
       <select id="cpUnit" class="filter-select" style="width:100%;padding:10px 12px"></select>
       <div class="hint">Välj bland enheterna som finns definierade i Grocy.</div>
     </div>
+    <button class="cp-more-btn" id="cpMoreBtn" type="button">
+      <i class="fas fa-chevron-right"></i> Mer
+    </button>
+    <div class="cp-extra-fields" id="cpExtraFields">
+      <div class="form-group">
+        <label>Produktgrupp</label>
+        <select id="cpGroup" class="filter-select" style="width:100%;padding:10px 12px">
+          <option value="">— Ingen grupp —</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Standardplats</label>
+        <select id="cpLocation" class="filter-select" style="width:100%;padding:10px 12px">
+          <option value="">— Ingen plats —</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Minimiantal i lager</label>
+        <div class="cp-min-stock-row">
+          <input type="number" id="cpMinStock" min="0" step="any" value="0" />
+          <span class="cp-min-stock-unit" id="cpMinStockUnit"></span>
+        </div>
+      </div>
+    </div>
     <div class="settings-actions">
       <button class="btn btn-ghost" id="cpCancelBtn">Avbryt</button>
       <button class="btn btn-primary" id="cpSaveBtn"><i class="fas fa-plus"></i> Skapa &amp; koppla</button>
@@ -797,6 +837,8 @@ const GROCY_USER = (window.GROCY_CONFIG?.user && window.GROCY_CONFIG.user !== '$
 // ─────────────────────────────────────────────
 let allProducts  = [];
 let allUnits     = [];
+let allGroups    = [];   // product_groups – used in create-product modal
+let allLocations = [];   // locations      – used in create-product modal
 let filteredList = [];
 const pendingChanges = new Map();
 const confirmedItems = new Set(); // session-only: products confirmed as inventoried
@@ -952,7 +994,9 @@ async function loadData() {
       grocyGet('/objects/locations').catch(() => [])
     ]);
 
-    allUnits = units || [];
+    allUnits     = units || [];
+    allGroups    = (categories || []).slice().sort((a, b) => a.name.localeCompare(b.name, 'sv'));
+    allLocations = (locations  || []).slice().sort((a, b) => a.name.localeCompare(b.name, 'sv'));
     const catMap   = Object.fromEntries((categories || []).map(c => [c.id, c.name]));
     const unitMap  = Object.fromEntries((units || []).map(u => [u.id, u.name]));
     const locMap   = Object.fromEntries((locations || []).map(l => [l.id, l.name]));
@@ -1863,6 +1907,7 @@ function openCreateProduct(shopItemId, name) {
   cpShopItemId = shopItemId;
   document.getElementById('cpName').value = name;
 
+  // Populate unit dropdown
   const sel = document.getElementById('cpUnit');
   sel.innerHTML = allUnits.map(u =>
     `<option value="${u.id}">${esc(u.name)}</option>`
@@ -1871,19 +1916,61 @@ function openCreateProduct(shopItemId, name) {
   const stUnit = allUnits.find(u => /^(st|stk|stück|piece|pcs|styck)/i.test(u.name));
   if (stUnit) sel.value = stUnit.id;
 
+  // Populate group dropdown
+  document.getElementById('cpGroup').innerHTML =
+    '<option value="">— Ingen grupp —</option>' +
+    allGroups.map(g => `<option value="${g.id}">${esc(g.name)}</option>`).join('');
+
+  // Populate location dropdown
+  document.getElementById('cpLocation').innerHTML =
+    '<option value="">— Ingen plats —</option>' +
+    allLocations.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join('');
+
+  // Reset extra fields state
+  document.getElementById('cpMinStock').value = '0';
+  cpUpdateUnitLabel();
+
+  // Collapse extra fields
+  document.getElementById('cpExtraFields').classList.remove('open');
+  document.getElementById('cpMoreBtn').classList.remove('open');
+
   document.getElementById('createProductOverlay').classList.remove('hidden');
   setTimeout(() => document.getElementById('cpName').select(), 50);
 }
+
+function cpUpdateUnitLabel() {
+  const unitId = document.getElementById('cpUnit').value;
+  const unit   = allUnits.find(u => String(u.id) === String(unitId));
+  document.getElementById('cpMinStockUnit').textContent = unit ? unit.name : '';
+}
+
+// Update unit label when unit selection changes
+document.getElementById('cpUnit').addEventListener('change', cpUpdateUnitLabel);
+
+// Toggle extra fields
+document.getElementById('cpMoreBtn').addEventListener('click', () => {
+  const extra = document.getElementById('cpExtraFields');
+  const btn   = document.getElementById('cpMoreBtn');
+  const isOpen = extra.classList.toggle('open');
+  btn.classList.toggle('open', isOpen);
+});
 
 document.getElementById('cpCancelBtn').addEventListener('click', () => {
   document.getElementById('createProductOverlay').classList.add('hidden');
 });
 
 document.getElementById('cpSaveBtn').addEventListener('click', async () => {
-  const name   = document.getElementById('cpName').value.trim();
-  const unitId = parseInt(document.getElementById('cpUnit').value);
+  const name      = document.getElementById('cpName').value.trim();
+  const unitId    = parseInt(document.getElementById('cpUnit').value);
   if (!name)   { toast('Ange ett produktnamn', 'error'); return; }
   if (!unitId) { toast('Välj en enhet', 'error'); return; }
+
+  // Read optional extra fields
+  const groupIdRaw    = document.getElementById('cpGroup').value;
+  const locationIdRaw = document.getElementById('cpLocation').value;
+  const minStockVal   = parseFloat(document.getElementById('cpMinStock').value) || 0;
+  const groupId       = groupIdRaw    ? parseInt(groupIdRaw)    : null;
+  const locationId    = locationIdRaw ? parseInt(locationIdRaw) : null;
 
   const btn = document.getElementById('cpSaveBtn');
   btn.disabled = true;
@@ -1898,21 +1985,30 @@ document.getElementById('cpSaveBtn').addEventListener('click', async () => {
       // Skapa produkten i Grocy
       const result = await grocyPost('/objects/products', {
         name,
-        location_id: null,
-        qu_id_stock: unitId,
-        qu_id_purchase: unitId,
-        min_stock_amount: 0
+        location_id:                locationId,
+        qu_id_stock:                unitId,
+        qu_id_purchase:             unitId,
+        min_stock_amount:           minStockVal,
+        product_group_id:           groupId,
+        disable_own_stock:          0,
+        never_show_on_stock_overview: 0
       });
       newProductId = result.created_object_id ?? result.id;
       if (!newProductId) throw new Error('Grocy returnerade inget produkt-id');
 
       // Lägg till i minnet så den syns direkt
-      const unit = allUnits.find(u => u.id == unitId);
+      const unit     = allUnits.find(u => u.id == unitId);
+      const groupObj = allGroups.find(g => g.id == groupId);
+      const locObj   = allLocations.find(l => l.id == locationId);
       allProducts.push({
-        id: String(newProductId), name,
-        category: '', location: '',
-        unit: unit ? unit.name : '',
-        minStock: 0, stock: 0
+        id:           String(newProductId),
+        name,
+        category:     groupObj ? groupObj.name : '',
+        location:     locObj   ? locObj.name   : '',
+        unit:         unit     ? unit.name      : '',
+        purchaseUnit: unit     ? unit.name      : '',
+        minStock:     minStockVal,
+        stock:        0
       });
       allProducts.sort((a, b) => a.name.localeCompare(b.name, 'sv'));
     }
