@@ -1599,10 +1599,12 @@ document.getElementById('receiveStockBtn').addEventListener('click', async () =>
   const btn = document.getElementById('receiveStockBtn');
   btn.disabled = true;
 
-  const withProduct  = doneItems.filter(i => i.product_id);
-  const freeTextSkip = doneItems.length - withProduct.length;
+  const withProduct = doneItems.filter(i => i.product_id);
+  const freeText    = doneItems.filter(i => !i.product_id);
+  const removedIds  = new Set(); // IDs to delete from the list
   let added = 0, failed = 0;
 
+  // Add products to stock; collect IDs of those that succeed
   await Promise.all(withProduct.map(async item => {
     try {
       await grocyPost(`/stock/products/${item.product_id}/add`, {
@@ -1610,6 +1612,7 @@ document.getElementById('receiveStockBtn').addEventListener('click', async () =>
         best_before_date: null,
         transaction_type: 'purchase'
       });
+      removedIds.add(String(item.id));
       added++;
     } catch (err) {
       console.error(`Kvittera in misslyckades för produkt ${item.product_id}:`, err.message);
@@ -1617,7 +1620,16 @@ document.getElementById('receiveStockBtn').addEventListener('click', async () =>
     }
   }));
 
-  // refresh stock levels in memory so inventory tab shows correct data
+  // Free-text items are always removed (nothing to add to stock)
+  freeText.forEach(i => removedIds.add(String(i.id)));
+
+  // Delete all processed items from the shopping list
+  await Promise.all([...removedIds].map(id =>
+    grocyDelete(`/objects/shopping_list/${id}`).catch(() => {})
+  ));
+  shoppingItems = shoppingItems.filter(i => !removedIds.has(String(i.id)));
+
+  // Refresh stock levels in memory so inventory tab shows correct data
   const freshStock = await grocyGet('/stock').catch(() => []);
   const stockMap = Object.fromEntries(freshStock.map(s => [String(s.product_id), parseFloat(s.amount) || 0]));
   allProducts.forEach(p => { p.stock = stockMap[p.id] ?? p.stock; });
@@ -1625,8 +1637,8 @@ document.getElementById('receiveStockBtn').addEventListener('click', async () =>
   btn.disabled = false;
   renderShoppingList();
 
-  let msg = `${added} vara(or) inkvitterade`;
-  if (freeTextSkip > 0) msg += ` · ${freeTextSkip} fritext hoppades över`;
+  let msg = `${added} vara(or) inkvitterade och borttagna`;
+  if (freeText.length > 0) msg += ` · ${freeText.length} fritext borttagna`;
   if (failed > 0) msg += ` · ${failed} misslyckades`;
   toast(msg, failed === 0 ? 'success' : 'error');
 });
