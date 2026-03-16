@@ -541,8 +541,8 @@
       font-weight: 600;
     }
     .cp-more-btn:hover { color: var(--primary-dark); }
-    .cp-more-btn i { font-size: 11px; transition: transform .2s; }
-    .cp-more-btn.open i { transform: rotate(90deg); }
+    .cp-more-btn i, .cp-more-btn svg { font-size: 11px; width: 11px; height: 11px; transition: transform .2s; }
+    .cp-more-btn.open i, .cp-more-btn.open svg { transform: rotate(90deg); }
     .cp-extra-fields { display: none; }
     .cp-extra-fields.open { display: block; }
     .cp-min-stock-row { display: flex; gap: 8px; align-items: center; }
@@ -1985,13 +1985,11 @@ document.getElementById('cpSaveBtn').addEventListener('click', async () => {
       // Skapa produkten i Grocy
       const result = await grocyPost('/objects/products', {
         name,
-        location_id:                locationId,
-        qu_id_stock:                unitId,
-        qu_id_purchase:             unitId,
-        min_stock_amount:           minStockVal,
-        product_group_id:           groupId,
-        disable_own_stock:          0,
-        never_show_on_stock_overview: 0
+        location_id:      locationId,
+        qu_id_stock:      unitId,
+        qu_id_purchase:   unitId,
+        min_stock_amount: minStockVal,
+        product_group_id: groupId
       });
       newProductId = result.created_object_id ?? result.id;
       if (!newProductId) throw new Error('Grocy returnerade inget produkt-id');
