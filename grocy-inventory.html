@@ -118,17 +118,43 @@
     }
     .filter-select:focus { border-color: var(--primary); }
 
-    /* ── Stats bar ── */
+    /* ── Quick-filter bar ── */
     .stats-bar {
-      max-width: 1100px; margin: 0 auto 20px;
-      padding: 0 20px; display: flex; gap: 12px; flex-wrap: wrap;
+      max-width: 1100px; margin: 0 auto 16px;
+      padding: 0 20px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
     }
     .stat-chip {
       background: var(--surface); border: 1px solid var(--border);
       border-radius: 100px; padding: 5px 14px;
       font-size: 13px; color: var(--text-muted);
+      white-space: nowrap;
     }
     .stat-chip b { color: var(--text); }
+    /* Clickable quick-filter chips */
+    .qf-chip {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 100px; padding: 5px 14px;
+      font-size: 13px; color: var(--text-muted);
+      cursor: pointer; white-space: nowrap;
+      display: inline-flex; align-items: center; gap: 5px;
+      transition: all .15s; user-select: none;
+    }
+    .qf-chip:hover { border-color: var(--primary); color: var(--primary); }
+    .qf-chip.active {
+      background: var(--primary); border-color: var(--primary);
+      color: #fff; font-weight: 600;
+    }
+    .qf-chip.active b { color: #fff; }
+    .qf-chip.qf-zero        { border-color: #feb2b2; color: #c53030; }
+    .qf-chip.qf-zero:hover,
+    .qf-chip.qf-zero.active { background: #c53030; border-color: #c53030; color: #fff; }
+    .qf-chip.qf-low         { border-color: #fbd38d; color: #c05621; }
+    .qf-chip.qf-low:hover,
+    .qf-chip.qf-low.active  { background: #c05621; border-color: #c05621; color: #fff; }
+    .qf-divider {
+      width: 1px; height: 20px; background: var(--border);
+      flex-shrink: 0; margin: 0 2px;
+    }
 
     /* ── Product grid ── */
     .product-grid {
@@ -151,7 +177,9 @@
       min-width: 0;        /* prevent grid blowout */
       overflow: hidden;    /* clip any overflow content */
     }
+    .product-card { cursor: pointer; }
     .product-card:hover { box-shadow: var(--shadow-lg); }
+    .product-card .card-top:hover .product-name { color: var(--primary); }
     .product-card.dirty { border-color: var(--warning-border); background: var(--warning-light); }
     .product-card.saved-flash { border-color: var(--success-border); background: var(--success-light); animation: pop .35s ease; }
     @keyframes pop {
@@ -224,6 +252,14 @@
       border-color: var(--success-border);
     }
     .product-card.confirmed:hover { opacity: 0.75; }
+
+    /* ── Stock log timestamp ── */
+    .card-log-date {
+      font-size: 11px; color: var(--text-light);
+      padding: 6px 0 0; opacity: 0.85;
+      display: flex; align-items: center; gap: 5px;
+    }
+    .card-log-date i { font-size: 10px; }
 
     .product-location {
       font-size: 11px; color: var(--primary);
@@ -814,6 +850,37 @@
   </div>
 </div>
 
+<!-- ── Edit product overlay ── -->
+<div class="overlay hidden" id="editProductOverlay">
+  <div class="settings-modal">
+    <h2>✏️ Redigera produkt</h2>
+    <p id="epProductName" style="font-weight:600;font-size:16px;color:var(--text);margin-bottom:20px"></p>
+    <div class="form-group">
+      <label>Produktgrupp</label>
+      <select id="epGroup" class="filter-select" style="width:100%;padding:10px 12px">
+        <option value="">— Ingen grupp —</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Standardplats</label>
+      <select id="epLocation" class="filter-select" style="width:100%;padding:10px 12px">
+        <option value="">— Ingen plats —</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Minimiantal i lager</label>
+      <div class="cp-min-stock-row">
+        <input type="number" id="epMinStock" min="0" step="any" value="0" />
+        <span class="cp-min-stock-unit" id="epMinStockUnit"></span>
+      </div>
+    </div>
+    <div class="settings-actions">
+      <button class="btn btn-ghost" id="epCancelBtn">Avbryt</button>
+      <button class="btn btn-primary" id="epSaveBtn"><i class="fas fa-floppy-disk"></i> Spara</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Toast ── -->
 <div id="toast"></div>
 
@@ -840,8 +907,10 @@ let allUnits     = [];
 let allGroups    = [];   // product_groups – used in create-product modal
 let allLocations = [];   // locations      – used in create-product modal
 let filteredList = [];
-const pendingChanges = new Map();
-const confirmedItems = new Set(); // session-only: products confirmed as inventoried
+const pendingChanges   = new Map();
+const confirmedItems   = new Set(); // session-only: products confirmed as inventoried
+let stockLastUpdated      = new Map(); // product_id → "ÅÅÅÅ-MM-DD HH:MM" from stock log
+let activeLocationFilter  = '';        // '' = all, otherwise location name string
 
 // ─────────────────────────────────────────────
 //  State – Shopping
@@ -981,6 +1050,8 @@ async function grocyDelete(path) {
 async function loadData() {
   pendingChanges.clear();
   confirmedItems.clear();
+  stockLastUpdated.clear();
+  activeLocationFilter = '';
   updateSaveBar();
   grid.innerHTML = `<div class="state-container"><div class="spinner"></div><p>Hämtar lager från Grocy…</p></div>`;
   statsBar.innerHTML = '';
@@ -1006,11 +1077,16 @@ async function loadData() {
       id:           String(p.id),
       name:         p.name,
       category:     catMap[p.product_group_id] || '',
-      location:     locMap[p.location_id] || '',
-      unit:         unitMap[p.qu_id_stock] || '',         // lagerenhet (inventering)
-      purchaseUnit: unitMap[p.qu_id_purchase] || unitMap[p.qu_id_stock] || '', // inköpsenhet (shoppinglista)
-      minStock:     parseFloat(p.min_stock_amount) || 0,
-      stock:        stockMap[String(p.id)] ?? 0
+      location:        locMap[p.location_id] || '',
+      unit:            unitMap[p.qu_id_stock] || '',
+      purchaseUnit:    unitMap[p.qu_id_purchase] || unitMap[p.qu_id_stock] || '',
+      minStock:        parseFloat(p.min_stock_amount) || 0,
+      stock:           stockMap[String(p.id)] ?? 0,
+      // raw IDs needed for PUT /objects/products/{id}
+      qu_id_stock:     p.qu_id_stock,
+      qu_id_purchase:  p.qu_id_purchase,
+      location_id:     p.location_id ?? null,
+      product_group_id: p.product_group_id ?? null
     })).sort((a, b) => a.name.localeCompare(b.name, 'sv'));
 
     const cats = [...new Set(allProducts.map(p => p.category).filter(Boolean))].sort();
@@ -1018,6 +1094,7 @@ async function loadData() {
       cats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
 
     applyFilters();
+    loadStockLog(); // async – fills in timestamps after initial render
   } catch (err) {
     console.error(err);
     grid.innerHTML = `
@@ -1031,6 +1108,125 @@ async function loadData() {
       </div>`;
   }
 }
+
+// ─────────────────────────────────────────────
+//  Stock log – last-updated timestamps
+// ─────────────────────────────────────────────
+async function loadStockLog() {
+  try {
+    const log = await grocyGet('/objects/stock_log?order=row_created_timestamp%3Adesc');
+    if (!Array.isArray(log)) return;
+
+    stockLastUpdated = new Map();
+    for (const entry of log) {
+      if (entry.undone == 1) continue;
+      const pid = String(entry.product_id);
+      if (!stockLastUpdated.has(pid) && entry.row_created_timestamp) {
+        const d = new Date(entry.row_created_timestamp);
+        // Format: "ÅÅÅÅ-MM-DD HH:MM"
+        const dateStr = d.toLocaleDateString('sv-SE') + ' ' +
+                        d.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
+        stockLastUpdated.set(pid, dateStr);
+      }
+    }
+
+    updateCardTimestamps();
+  } catch (err) {
+    console.debug('[Grocy] Stock log fetch failed —', err.message);
+  }
+}
+
+function updateCardTimestamps() {
+  stockLastUpdated.forEach((dateStr, pid) => {
+    const card = document.getElementById(`card-${pid}`);
+    if (!card) return;
+    let el = card.querySelector('.card-log-date');
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'card-log-date';
+      card.appendChild(el);
+    }
+    el.innerHTML = `<i class="fas fa-clock"></i> ${esc(dateStr)}`;
+  });
+}
+
+// ─────────────────────────────────────────────
+//  Edit product modal
+// ─────────────────────────────────────────────
+let epProductId = null;
+
+function openEditProduct(id) {
+  const p = allProducts.find(p => p.id === String(id));
+  if (!p) return;
+  epProductId = p.id;
+
+  document.getElementById('epProductName').textContent = p.name;
+
+  // Populate group dropdown
+  document.getElementById('epGroup').innerHTML =
+    '<option value="">— Ingen grupp —</option>' +
+    allGroups.map(g => `<option value="${g.id}">${esc(g.name)}</option>`).join('');
+  document.getElementById('epGroup').value = p.product_group_id ?? '';
+
+  // Populate location dropdown
+  document.getElementById('epLocation').innerHTML =
+    '<option value="">— Ingen plats —</option>' +
+    allLocations.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join('');
+  document.getElementById('epLocation').value = p.location_id ?? '';
+
+  // Min stock + unit label
+  document.getElementById('epMinStock').value = p.minStock ?? 0;
+  document.getElementById('epMinStockUnit').textContent = p.unit || '';
+
+  document.getElementById('editProductOverlay').classList.remove('hidden');
+}
+
+document.getElementById('epCancelBtn').addEventListener('click', () => {
+  document.getElementById('editProductOverlay').classList.add('hidden');
+});
+
+document.getElementById('epSaveBtn').addEventListener('click', async () => {
+  const p = allProducts.find(p => p.id === String(epProductId));
+  if (!p) return;
+
+  const groupIdRaw    = document.getElementById('epGroup').value;
+  const locationIdRaw = document.getElementById('epLocation').value;
+  const minStockVal   = parseFloat(document.getElementById('epMinStock').value) || 0;
+  const groupId       = groupIdRaw    ? parseInt(groupIdRaw)    : null;
+  const locationId    = locationIdRaw ? parseInt(locationIdRaw) : null;
+
+  const btn = document.getElementById('epSaveBtn');
+  btn.disabled = true;
+
+  try {
+    await grocyPut(`/objects/products/${p.id}`, {
+      name:             p.name,
+      qu_id_stock:      p.qu_id_stock,
+      qu_id_purchase:   p.qu_id_purchase,
+      location_id:      locationId,
+      product_group_id: groupId,
+      min_stock_amount: minStockVal
+    });
+
+    // Update in-memory product
+    const groupObj = allGroups.find(g => g.id == groupId);
+    const locObj   = allLocations.find(l => l.id == locationId);
+    p.product_group_id = groupId;
+    p.location_id      = locationId;
+    p.minStock         = minStockVal;
+    p.category         = groupObj ? groupObj.name : '';
+    p.location         = locObj   ? locObj.name   : '';
+
+    document.getElementById('editProductOverlay').classList.add('hidden');
+    applyFilters(); // re-render grid + rebuild category filter
+
+    toast(`"${p.name}" uppdaterades ✓`, 'success');
+  } catch (err) {
+    toast(`Kunde inte spara: ${err.message}`, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 // ─────────────────────────────────────────────
 //  Pending-changes tracking
@@ -1079,6 +1275,7 @@ function applyFilters() {
     const effectiveStock = pendingChanges.has(p.id) ? pendingChanges.get(p.id) : p.stock;
     if (q   && !p.name.toLowerCase().includes(q)) return false;
     if (cat && p.category !== cat)                 return false;
+    if (activeLocationFilter && p.location !== activeLocationFilter) return false;
     if (sf === 'zero'         && effectiveStock !== 0)     return false;
     if (sf === 'low'          && (effectiveStock === 0 || effectiveStock >= p.minStock)) return false;
     if (sf === 'ok'           && effectiveStock < p.minStock) return false;
@@ -1114,23 +1311,54 @@ function renderStats() {
   const low       = allProducts.filter(p => p.stock > 0 && p.minStock > 0 && p.stock < p.minStock).length;
   const showing   = filteredList.length;
   const confirmed = confirmedItems.size;
-  statsBar.innerHTML = `
-    <div class="stat-chip">Totalt <b>${total}</b> produkter</div>
-    ${zero ? `<div class="stat-chip" style="border-color:#feb2b2;color:#c53030">Slut: <b>${zero}</b></div>` : ''}
-    ${low  ? `<div class="stat-chip" style="border-color:#fbd38d;color:#c05621">Lågt: <b>${low}</b></div>` : ''}
-    <div class="stat-chip">Visar <b>${showing}</b></div>
-    ${confirmed > 0 ? `<div class="stat-chip" style="border-color:var(--success-border);color:var(--success)">Bekräftade: <b>${confirmed}</b> / ${total}</div>` : ''}
-  `;
-}
+  const sf        = stockFilter.value;
 
-// Sort helper: confirmed items go last, otherwise preserve current order
-function sortConfirmedLast(list) {
-  return [...list].sort((a, b) => {
-    const ac = confirmedItems.has(a.id) ? 1 : 0;
-    const bc = confirmedItems.has(b.id) ? 1 : 0;
-    return ac - bc;
+  // Unique locations sorted A-Ö, with count per location
+  const locCounts = {};
+  allProducts.forEach(p => {
+    const loc = p.location || '';
+    if (loc) locCounts[loc] = (locCounts[loc] || 0) + 1;
+  });
+  const locs = Object.keys(locCounts).sort((a, b) => a.localeCompare(b, 'sv'));
+
+  const locationChips = locs.map(loc => {
+    const isActive = activeLocationFilter === loc;
+    return `<button class="qf-chip${isActive ? ' active' : ''}" data-qf-loc="${esc(loc)}">
+      <i class="fas fa-location-dot" style="font-size:10px"></i> ${esc(loc)} <b>${locCounts[loc]}</b>
+    </button>`;
+  }).join('');
+
+  statsBar.innerHTML = `
+    <div class="stat-chip">Totalt <b>${total}</b></div>
+    ${zero ? `<button class="qf-chip qf-zero${sf === 'zero' ? ' active' : ''}" data-qf-stock="zero">Slut <b>${zero}</b></button>` : ''}
+    ${low  ? `<button class="qf-chip qf-low${sf === 'low'  ? ' active' : ''}" data-qf-stock="low">Lågt <b>${low}</b></button>`   : ''}
+    ${confirmed > 0 ? `<div class="stat-chip" style="border-color:var(--success-border);color:var(--success)">Bekräftade <b>${confirmed}</b>/<b>${total}</b></div>` : ''}
+    ${locs.length ? `<div class="qf-divider"></div>${locationChips}` : ''}
+    ${(activeLocationFilter || (sf === 'zero' || sf === 'low')) ? `<div class="qf-divider"></div><button class="qf-chip" id="qfClearBtn" style="color:var(--danger);border-color:var(--danger)"><i class="fas fa-xmark"></i> Rensa</button>` : ''}
+  `;
+
+  // Attach click handlers
+  statsBar.querySelectorAll('[data-qf-stock]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const val = btn.dataset.qfStock;
+      stockFilter.value = (sf === val) ? '' : val; // toggle
+      applyFilters();
+    });
+  });
+  statsBar.querySelectorAll('[data-qf-loc]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const loc = btn.dataset.qfLoc;
+      activeLocationFilter = (activeLocationFilter === loc) ? '' : loc; // toggle
+      applyFilters();
+    });
+  });
+  document.getElementById('qfClearBtn')?.addEventListener('click', () => {
+    activeLocationFilter = '';
+    stockFilter.value = '';
+    applyFilters();
   });
 }
+
 
 function renderGrid() {
   if (filteredList.length === 0) {
@@ -1150,7 +1378,7 @@ function renderGrid() {
       groupCounts[k] = (groupCounts[k] || 0) + 1;
     });
     let lastKey;
-    sortConfirmedLast(filteredList).forEach(p => {
+    filteredList.forEach(p => {
       const key = (groupBy === 'location' ? p.location : p.category) || '';
       if (key !== lastKey) {
         html += `<div class="group-header">
@@ -1163,7 +1391,7 @@ function renderGrid() {
       html += productCard(p, groupBy);
     });
   } else {
-    html = sortConfirmedLast(filteredList).map(p => productCard(p, '')).join('');
+    html = filteredList.map(p => productCard(p, '')).join('');
   }
 
   grid.innerHTML = html;
@@ -1177,14 +1405,21 @@ function renderGrid() {
     }
   });
 
-  grid.querySelectorAll('.qty-btn-minus').forEach(btn =>
-    btn.addEventListener('click', () => adjustQty(btn.dataset.id, -1)));
-  grid.querySelectorAll('.qty-btn-plus').forEach(btn =>
-    btn.addEventListener('click', () => adjustQty(btn.dataset.id, +1)));
-  grid.querySelectorAll('.qty-input').forEach(input => {
+  grid.querySelectorAll('.product-card').forEach(card => {
+    const id = card.id.replace('card-', '');
+    attachCardEvents(card, id);
+  });
+}
+
+function attachCardEvents(card, id) {
+  card.querySelector('.qty-btn-minus')?.addEventListener('click', () => adjustQty(id, -1));
+  card.querySelector('.qty-btn-plus')?.addEventListener('click',  () => adjustQty(id, +1));
+
+  const input = card.querySelector('.qty-input');
+  if (input) {
     input.addEventListener('input', () => {
       const val = parseFloat(input.value);
-      if (!isNaN(val) && val >= 0) markChange(input.dataset.id, val);
+      if (!isNaN(val) && val >= 0) markChange(id, val);
     });
     input.addEventListener('keydown', e => {
       if (e.key === 'Enter') {
@@ -1194,9 +1429,14 @@ function renderGrid() {
         if (idx < inputs.length - 1) inputs[idx + 1].focus();
       }
     });
-  });
-  grid.querySelectorAll('.confirm-btn').forEach(btn => {
-    btn.addEventListener('click', () => toggleConfirm(btn.dataset.id));
+  }
+
+  card.querySelector('.confirm-btn')?.addEventListener('click', () => toggleConfirm(id));
+
+  // Click anywhere on the card (outside interactive elements) → open edit
+  card.addEventListener('click', e => {
+    if (e.target.closest('button, input')) return;
+    openEditProduct(id);
   });
 }
 
@@ -1243,6 +1483,7 @@ function productCard(p, groupBy) {
           <i class="fas fa-check"></i>
         </button>
       </div>
+      ${stockLastUpdated.has(p.id) ? `<div class="card-log-date"><i class="fas fa-clock"></i> ${esc(stockLastUpdated.get(p.id))}</div>` : ''}
     </div>`;
 }
 
@@ -1264,24 +1505,7 @@ function toggleConfirm(id) {
     // restore dirty state if needed
     if (pendingChanges.has(id)) newCard.classList.add('dirty');
     card.replaceWith(newCard);
-    // re-attach events on the new card
-    newCard.querySelector('.qty-btn-minus')?.addEventListener('click', () => adjustQty(id, -1));
-    newCard.querySelector('.qty-btn-plus')?.addEventListener('click', () => adjustQty(id, +1));
-    newCard.querySelector('.qty-input')?.addEventListener('input', e => {
-      const val = parseFloat(e.target.value);
-      if (!isNaN(val) && val >= 0) markChange(id, val);
-    });
-    newCard.querySelector('.confirm-btn')?.addEventListener('click', () => toggleConfirm(id));
-    // move card to correct position (confirmed → end, unconfirmed → before first confirmed)
-    const allCards = [...grid.querySelectorAll('.product-card')];
-    const firstConfirmed = allCards.find(c => c.classList.contains('confirmed') && c !== newCard);
-    if (confirmedItems.has(id) && firstConfirmed) {
-      firstConfirmed.parentNode.insertBefore(newCard, firstConfirmed.nextSibling ?? null);
-      // actually append after last confirmed sibling — simplest: move to end of parent
-      newCard.parentNode.appendChild(newCard);
-    } else if (!confirmedItems.has(id) && firstConfirmed) {
-      firstConfirmed.parentNode.insertBefore(newCard, firstConfirmed);
-    }
+    attachCardEvents(newCard, id);
   }
 }
 
