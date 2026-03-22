@@ -105,14 +105,14 @@
       transform: translateY(-50%); color: var(--text-light); pointer-events: none;
     }
     .search-wrap input {
-      width: 100%; padding: 9px 12px 9px 36px;
+      width: 100%; height: 40px; padding: 0 12px 0 36px;
       border: 1px solid var(--border); border-radius: var(--radius-sm);
-      background: var(--surface); font-size: 16px; color: var(--text);
+      background: var(--surface); font-size: 14px; color: var(--text);
       outline: none; transition: border-color .15s;
     }
     .search-wrap input:focus { border-color: var(--primary); }
     .filter-select {
-      padding: 9px 12px; border: 1px solid var(--border);
+      height: 40px; padding: 0 12px; border: 1px solid var(--border);
       border-radius: var(--radius-sm); font-size: 14px; color: var(--text);
       background: var(--surface); outline: none; cursor: pointer;
     }
@@ -1275,7 +1275,8 @@ function applyFilters() {
     const effectiveStock = pendingChanges.has(p.id) ? pendingChanges.get(p.id) : p.stock;
     if (q   && !p.name.toLowerCase().includes(q)) return false;
     if (cat && p.category !== cat)                 return false;
-    if (activeLocationFilter && p.location !== activeLocationFilter) return false;
+    if (activeLocationFilter === '__none__' && p.location) return false;
+    if (activeLocationFilter && activeLocationFilter !== '__none__' && p.location !== activeLocationFilter) return false;
     if (sf === 'zero'         && effectiveStock !== 0)     return false;
     if (sf === 'low'          && (effectiveStock === 0 || effectiveStock >= p.minStock)) return false;
     if (sf === 'ok'           && effectiveStock < p.minStock) return false;
@@ -1315,9 +1316,11 @@ function renderStats() {
 
   // Unique locations sorted A-Ö, with count per location
   const locCounts = {};
+  let noLocationCount = 0;
   allProducts.forEach(p => {
     const loc = p.location || '';
     if (loc) locCounts[loc] = (locCounts[loc] || 0) + 1;
+    else noLocationCount++;
   });
   const locs = Object.keys(locCounts).sort((a, b) => a.localeCompare(b, 'sv'));
 
@@ -1328,13 +1331,22 @@ function renderStats() {
     </button>`;
   }).join('');
 
+  const noLocChip = noLocationCount > 0
+    ? `<button class="qf-chip${activeLocationFilter === '__none__' ? ' active' : ''}" data-qf-loc="__none__">
+        <i class="fas fa-location-dot" style="font-size:10px;opacity:.4"></i> Utan plats <b>${noLocationCount}</b>
+       </button>`
+    : '';
+
+  const anyFilterActive = activeLocationFilter || sf === 'zero' || sf === 'low';
+
   statsBar.innerHTML = `
     <div class="stat-chip">Totalt <b>${total}</b></div>
     ${zero ? `<button class="qf-chip qf-zero${sf === 'zero' ? ' active' : ''}" data-qf-stock="zero">Slut <b>${zero}</b></button>` : ''}
     ${low  ? `<button class="qf-chip qf-low${sf === 'low'  ? ' active' : ''}" data-qf-stock="low">Lågt <b>${low}</b></button>`   : ''}
     ${confirmed > 0 ? `<div class="stat-chip" style="border-color:var(--success-border);color:var(--success)">Bekräftade <b>${confirmed}</b>/<b>${total}</b></div>` : ''}
-    ${locs.length ? `<div class="qf-divider"></div>${locationChips}` : ''}
-    ${(activeLocationFilter || (sf === 'zero' || sf === 'low')) ? `<div class="qf-divider"></div><button class="qf-chip" id="qfClearBtn" style="color:var(--danger);border-color:var(--danger)"><i class="fas fa-xmark"></i> Rensa</button>` : ''}
+    <div class="qf-divider"></div>
+    ${locationChips}${noLocChip}
+    ${anyFilterActive ? `<div class="qf-divider"></div><button class="qf-chip" id="qfClearBtn" style="color:var(--danger);border-color:var(--danger)"><i class="fas fa-xmark"></i> Rensa</button>` : ''}
   `;
 
   // Attach click handlers
