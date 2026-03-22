@@ -100,9 +100,11 @@
       display: flex; gap: 12px; flex-wrap: wrap; align-items: center;
     }
     .search-wrap { flex: 1; min-width: 200px; position: relative; }
-    .search-wrap i {
+    /* Font Awesome replaces <i> with <svg> — target both */
+    .search-wrap i, .search-wrap svg {
       position: absolute; left: 12px; top: 50%;
       transform: translateY(-50%); color: var(--text-light); pointer-events: none;
+      width: 14px; height: 14px;
     }
     .search-wrap input {
       width: 100%; height: 40px; padding: 0 12px 0 36px;
@@ -117,6 +119,15 @@
       background: var(--surface); outline: none; cursor: pointer;
     }
     .filter-select:focus { border-color: var(--primary); }
+    .sort-dir-btn {
+      height: 40px; width: 40px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      background: var(--surface); color: var(--text-muted);
+      cursor: pointer; font-size: 16px; transition: all .15s;
+    }
+    .sort-dir-btn:hover { border-color: var(--primary); color: var(--primary); }
+    .sort-dir-btn.desc i, .sort-dir-btn.desc svg { transform: scaleY(-1); }
 
     /* ── Quick-filter bar ── */
     .stats-bar {
@@ -648,10 +659,10 @@
   <div class="header-left">
     <div class="logo">Grocy</div>
     <nav class="tab-nav">
-      <button class="tab-btn active" data-tab="inventory">
+      <button class="tab-btn" data-tab="inventory">
         <i class="fas fa-boxes-stacked"></i> <span>Inventering</span>
       </button>
-      <button class="tab-btn" data-tab="shopping">
+      <button class="tab-btn active" data-tab="shopping">
         <i class="fas fa-cart-shopping"></i> <span>Inköpslista</span>
       </button>
     </nav>
@@ -669,7 +680,7 @@
 <!-- ══════════════════════════════════════════
      FLIK: INVENTERING
 ══════════════════════════════════════════ -->
-<div id="tab-inventory" class="tab-content active">
+<div id="tab-inventory" class="tab-content">
 
   <div class="toolbar">
     <div class="search-wrap">
@@ -690,7 +701,11 @@
       <option value="name">Sortera: Namn</option>
       <option value="location">Sortera: Plats</option>
       <option value="category">Sortera: Kategori</option>
+      <option value="updated">Sortera: Senast uppdaterad</option>
     </select>
+    <button class="sort-dir-btn" id="sortDirBtn" title="Byt sorteringsordning">
+      <i class="fas fa-arrow-up-short-wide"></i>
+    </button>
     <select class="filter-select" id="groupSelect">
       <option value="">Ingen gruppering</option>
       <option value="location">Gruppera: Plats</option>
@@ -712,7 +727,7 @@
 <!-- ══════════════════════════════════════════
      FLIK: INKÖPSLISTA
 ══════════════════════════════════════════ -->
-<div id="tab-shopping" class="tab-content">
+<div id="tab-shopping" class="tab-content active">
 
   <div class="shopping-container">
 
@@ -911,6 +926,7 @@ const pendingChanges   = new Map();
 const confirmedItems   = new Set(); // session-only: products confirmed as inventoried
 let stockLastUpdated      = new Map(); // product_id → "ÅÅÅÅ-MM-DD HH:MM" from stock log
 let activeLocationFilter  = '';        // '' = all, otherwise location name string
+let sortDir               = 'asc';     // 'asc' | 'desc'
 
 // ─────────────────────────────────────────────
 //  State – Shopping
@@ -929,6 +945,7 @@ const searchInput   = document.getElementById('searchInput');
 const catFilter     = document.getElementById('categoryFilter');
 const stockFilter   = document.getElementById('stockFilter');
 const sortSelect    = document.getElementById('sortSelect');
+const sortDirBtn    = document.getElementById('sortDirBtn');
 const groupSelect   = document.getElementById('groupSelect');
 const statsBar      = document.getElementById('statsBar');
 const overlay       = document.getElementById('settingsOverlay');
@@ -1284,21 +1301,37 @@ function applyFilters() {
     return true;
   });
 
-  filteredList.sort((a, b) => {
-    if (sortBy === 'location') return (a.location||'').localeCompare(b.location||'','sv') || a.name.localeCompare(b.name,'sv');
-    if (sortBy === 'category') return (a.category||'').localeCompare(b.category||'','sv') || a.name.localeCompare(b.name,'sv');
-    return a.name.localeCompare(b.name, 'sv');
-  });
+  const dir = sortDir === 'desc' ? -1 : 1;
+
+  // Base comparator (respects dir, always puts items without data last)
+  function cmp(a, b) {
+    if (sortBy === 'location') {
+      return dir * ((a.location||'').localeCompare(b.location||'','sv') || a.name.localeCompare(b.name,'sv'));
+    }
+    if (sortBy === 'category') {
+      return dir * ((a.category||'').localeCompare(b.category||'','sv') || a.name.localeCompare(b.name,'sv'));
+    }
+    if (sortBy === 'updated') {
+      const ta = stockLastUpdated.get(a.id) || '';
+      const tb = stockLastUpdated.get(b.id) || '';
+      // Items without a timestamp always go last regardless of direction
+      if (!ta && !tb) return a.name.localeCompare(b.name, 'sv');
+      if (!ta) return 1;
+      if (!tb) return -1;
+      return dir * ta.localeCompare(tb);
+    }
+    return dir * a.name.localeCompare(b.name, 'sv');
+  }
+
+  filteredList.sort(cmp);
 
   if (groupBy) {
     filteredList.sort((a, b) => {
       const kA = (groupBy === 'location' ? a.location : a.category) || '';
       const kB = (groupBy === 'location' ? b.location : b.category) || '';
       const g = kA.localeCompare(kB, 'sv');
-      if (g !== 0) return g;
-      if (sortBy === 'location') return (a.location||'').localeCompare(b.location||'','sv') || a.name.localeCompare(b.name,'sv');
-      if (sortBy === 'category') return (a.category||'').localeCompare(b.category||'','sv') || a.name.localeCompare(b.name,'sv');
-      return a.name.localeCompare(b.name, 'sv');
+      if (g !== 0) return g; // group order is always ascending
+      return cmp(a, b);     // within group: respect dir + sortBy
     });
   }
 
@@ -2291,6 +2324,13 @@ stockFilter.addEventListener('change', applyFilters);
 sortSelect.addEventListener('change', applyFilters);
 groupSelect.addEventListener('change', applyFilters);
 
+sortDirBtn.addEventListener('click', () => {
+  sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+  sortDirBtn.classList.toggle('desc', sortDir === 'desc');
+  sortDirBtn.title = sortDir === 'asc' ? 'Stigande ordning' : 'Fallande ordning';
+  applyFilters();
+});
+
 // ─────────────────────────────────────────────
 //  Utilities
 // ─────────────────────────────────────────────
@@ -2312,7 +2352,7 @@ console.debug('[Grocy] GROCY_USER from ForwardAuth:', JSON.stringify(GROCY_USER)
 if (!GROCY_URL || !GROCY_KEY) {
   openSettings();
 } else {
-  loadData();
+  loadShoppingList(); // shopping list is the default tab
 }
 </script>
 </body>
