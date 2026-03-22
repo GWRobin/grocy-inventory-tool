@@ -659,11 +659,11 @@
   <div class="header-left">
     <div class="logo">Grocy</div>
     <nav class="tab-nav">
-      <button class="tab-btn" data-tab="inventory">
-        <i class="fas fa-boxes-stacked"></i> <span>Inventering</span>
-      </button>
       <button class="tab-btn active" data-tab="shopping">
         <i class="fas fa-cart-shopping"></i> <span>Inköpslista</span>
+      </button>
+      <button class="tab-btn" data-tab="inventory">
+        <i class="fas fa-boxes-stacked"></i> <span>Inventering</span>
       </button>
     </nav>
   </div>
@@ -979,14 +979,19 @@ function toast(msg, type = 'default') {
 //  Tab switching
 // ─────────────────────────────────────────────
 function switchTab(name) {
+  localStorage.setItem('grocy_active_tab', name);
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
   document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === `tab-${name}`));
-  // hide save bar when on shopping tab
   if (name === 'shopping') {
     saveBar.classList.remove('visible');
     loadShoppingList();
   } else {
-    if (pendingChanges.size > 0) saveBar.classList.add('visible');
+    // Inventory tab: load product data if not yet fetched
+    if (allProducts.length === 0) {
+      loadData();
+    } else {
+      if (pendingChanges.size > 0) saveBar.classList.add('visible');
+    }
   }
 }
 
@@ -2349,10 +2354,19 @@ const configFromEnv = !!(window.GROCY_CONFIG?.url && window.GROCY_CONFIG.url !==
 if (configFromEnv) document.getElementById('settingsBtn').style.display = 'none';
 console.debug('[Grocy] GROCY_USER from ForwardAuth:', JSON.stringify(GROCY_USER) || '(tom — ForwardAuth ej konfigurerat)');
 
+// Restore last active tab before any data loads (prevents visual flash)
+const savedTab = localStorage.getItem('grocy_active_tab') || 'shopping';
+document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === savedTab));
+document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === `tab-${savedTab}`));
+
 if (!GROCY_URL || !GROCY_KEY) {
   openSettings();
 } else {
-  loadShoppingList(); // shopping list is the default tab
+  // loadData() always runs first — it populates allProducts which shopping list needs for names.
+  // After products are loaded, kick off the tab-appropriate data load.
+  loadData().then(() => {
+    if (savedTab === 'shopping') loadShoppingList();
+  });
 }
 </script>
 </body>
